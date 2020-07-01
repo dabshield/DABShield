@@ -11,6 +11,7 @@
 // v0.10 19/09/2018 - Removed Serial.print
 // v0.11 06/09/2019 - Added FM seek and valid
 // v0.12 17/12/2019 - Corrected DAB Freqs 
+// v1.1.3 01/07/2020 - Updated Version Format for Arduino IDE Managed Libraries
 ///////////////////////////////////////////////////////////
 #ifndef DABShield_h
 #define DABShield_h
