@@ -13,6 +13,7 @@
 // v0.11 06/09/2019 - Added FM seek and valid
 // v0.12 17/12/2019 - Corrected DAB Freqs
 // v1.1.3 01/07/2020 - Updated Version Format for Arduino IDE Managed Libraries
+// v1.2.0 15/07/2020 - Prevent DLS Tag Command being sent as DLS Message
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
@@ -150,6 +151,8 @@ void DAB::DataService(void)
 
 void DAB::begin(void)
 {
+	freq_index = -1;
+
 	si468x_reset();
 	si468x_init_dab();
 	si468x_get_part_info();
@@ -159,6 +162,8 @@ void DAB::begin(void)
 
 void DAB::begin(uint8_t band)
 {
+	freq_index = -1;
+	
 	si468x_reset();
 	if(band == 0)
 	{
@@ -181,7 +186,15 @@ void DAB::tune(uint8_t freq)
 	freq_index = freq;
 	ServiceData[0] = '\0';
 	si468x_dab_tune_freq(freq_index);
-	get_ensemble_info();
+	if(command_error == 0)
+	{
+		get_ensemble_info();
+	}
+	else
+	{
+		//failed to tune
+		freq_index = -1;
+	}
 	error = command_error;
 }
 
@@ -219,7 +232,7 @@ void DAB::tune(uint16_t freq_kHz)
 
 	uint8_t i;
 	for(i=0; i<9; i++) {ps[i] = 0;}
-	for(i=0; i<65; i++) {ServiceData[i] = 0;}
+	for(i=0; i<DAB_MAX_SERVICEDATA_LEN; i++) {ServiceData[i] = 0;}
 	error = command_error;
 }
 
@@ -360,7 +373,7 @@ static void si468x_init_dab()
 	si468x_set_property(0x1712, 0x0001);
 
 	si468x_set_property(0x8100, 0x0001);	//enable DSRVPCKTINT
-	si468x_set_property(0xb400, 0x0007);	//enable XPAD data
+	si468x_set_property(0xb400, 0x0007);	//enable XPAD data	
 }
 
 static void si468x_init_fm()
@@ -901,15 +914,29 @@ void DAB::parse_service_data(void)
 
 	if (data_src == 0x02) //DLS/DL+ over PAD for DLS services
 	{
-		if (byte_count > DAB_MAX_SERVICEDATA_LEN)
+		uint8_t header1;
+		uint8_t header2;
+		
+		header1 = spiBuf[25];
+		header2 = spiBuf[26];
+
+		if((header1 & 0x10) == 0x10)
 		{
-			byte_count = DAB_MAX_SERVICEDATA_LEN;
+			//DLS Tags Command
 		}
-		for (j = 0; j < (byte_count - 2 - 1); j++)
-		{
-			ServiceData[j] = (char)spiBuf[27 + j];
+		else
+		{				
+			//DLS Message
+			if (byte_count > DAB_MAX_SERVICEDATA_LEN)
+			{
+				byte_count = DAB_MAX_SERVICEDATA_LEN;
+			}
+			for (j = 0; j < (byte_count - 2 - 1); j++)
+			{
+				ServiceData[j] = (char)spiBuf[27 + j];
+			}
+			ServiceData[j] = '\0';
 		}
-		ServiceData[j] = '\0';
 	}
 	else
 	{
