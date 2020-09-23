@@ -19,6 +19,7 @@
 // v0.8 06/02/2020 - Fix for no dab stations EEPROM to allow FM.
 // v0.9 05/06/2020 - non volatile memory storeage for Due
 // v1.0 16/07/2020 - Display mapping for EU chars, Interface speed up for next/previous
+// v1.1 23/09/2020 - Added ESP32 D1 R32 Support
 ////////////////////////////////////////////////////////////
 #include "Arduino.h"
 
@@ -65,12 +66,22 @@ Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 
 
 //SPI Ports for BIT
+#if defined(ARDUINO_ARCH_ESP32)
+const byte slaveSelectPin = 12;
+#else
 const byte slaveSelectPin = 8;
+#endif
 
 #ifdef DAB_SPI_BITBANG
+#if defined(ARDUINO_ARCH_ESP32)
+const byte SCKPin = 18;
+const byte MISOPin = 19;
+const byte MOSIPin = 23;
+#else
 const byte SCKPin = 13;
 const byte MISOPin = 12;
 const byte MOSIPin = 11;
+#endif
 #endif
 
 //App Data

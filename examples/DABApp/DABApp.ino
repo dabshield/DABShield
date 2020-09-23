@@ -10,7 +10,8 @@
 // v0.7 27/11/2017 - Added Get Time support
 // v0.8 06/12/2017 - Added FM/RDS Functionality
 // v0.9 05/09/2019 - Enhanced FM functionality (seek/scan)
-////////////////////////////////////////////////////////////
+// v1.0 23/09/2020 - Added ESP32 D1 R32 Support
+///////////////////////////////////////////////////////////
 #include <SPI.h>
 #include <DABShield.h>
 
@@ -30,12 +31,22 @@
 
 DAB Dab;
 //SPI Ports for BIT
+#if defined(ARDUINO_ARCH_ESP32)
+const byte slaveSelectPin = 12;
+#else
 const byte slaveSelectPin = 8;
+#endif
 
 #ifdef DAB_SPI_BITBANG
+#if defined(ARDUINO_ARCH_ESP32)
+const byte SCKPin = 18;
+const byte MISOPin = 19;
+const byte MOSIPin = 23;
+#else
 const byte SCKPin = 13;
 const byte MISOPin = 12;
 const byte MOSIPin = 11;
+#endif
 #endif
 
 bool dabmode = true;

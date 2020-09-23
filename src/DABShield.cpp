@@ -14,12 +14,13 @@
 // v0.12 17/12/2019 - Corrected DAB Freqs
 // v1.1.3 01/07/2020 - Updated Version Format for Arduino IDE Managed Libraries
 // v1.2.0 15/07/2020 - Prevent DLS Tag Command being sent as DLS Message
+// v1.3.0 15/07/2020 - Added ESP32 D1 R32 Support
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
 
-#define LIBMAJOR	0
-#define LIBMINOR	9
+#define LIBMAJOR	1
+#define LIBMINOR	3
 
 #define SI46XX_RD_REPLY 				0x00
 #define SI46XX_POWER_UP 				0x01
@@ -57,9 +58,15 @@
 #define SI46XX_DAB_GET_AUDIO_INFO 			0xBD
 #define SI46XX_DAB_GET_SUBCHAN_INFO 			0xBE
 
+#if defined(ARDUINO_ARCH_ESP32)
+const byte interruptPin = 26;
+const byte DABResetPin = 14;
+const byte PwrEn = 27;
+#else
 const byte interruptPin = 2;
 const byte DABResetPin = 7;
 const byte PwrEn = 6;
+#endif
 
 #define SPI_BUFF_SIZE	768
 unsigned char spiBuf[SPI_BUFF_SIZE];
