@@ -12,6 +12,7 @@
 // v0.11 06/09/2019 - Added FM seek and valid
 // v0.12 17/12/2019 - Corrected DAB Freqs 
 // v1.1.3 01/07/2020 - Updated Version Format for Arduino IDE Managed Libraries
+// v1.4.0 10/12/2020 - Added Audio Status
 ///////////////////////////////////////////////////////////
 #ifndef DABShield_h
 #define DABShield_h
@@ -25,8 +26,16 @@ const PROGMEM uint32_t dab_freq[] = {174928, 176640, 178352, 180064, 181936, 183
 
 #define DAB_FREQS (sizeof(dab_freq) / sizeof(dab_freq[0]))
 
-#define DAB_MAX_SERVICES		16
+#define DAB_MAX_SERVICES		24
 #define DAB_MAX_SERVICEDATA_LEN	128
+
+typedef enum _AudioMode
+{
+	DUAL = 0,
+	MONO,
+	STEREO,
+	JOINT_STEREO
+} AudioMode;
 
 typedef struct _Services
 {
@@ -61,6 +70,9 @@ class DAB {
 	bool seek(uint8_t dir, uint8_t wrap);
 	bool status(void);
 	bool time(DABTime *time);
+	void mono(bool enable);
+	void mute(bool left, bool right);
+
     void set_service(uint8_t index);
 	bool servicevalid(void);
     void vol(uint8_t vol);
@@ -86,10 +98,18 @@ class DAB {
 	uint16_t	freq;
 	int8_t		signalstrength;
 	int8_t		snr;
+	uint8_t		quality;
 	bool		valid;
 
-	uint16_t	pi;
+	uint16_t	bitrate;
+	uint16_t	samplerate;
+	AudioMode	mode;
+	bool		dabplus;
 	uint8_t		pty;
+
+
+
+	uint16_t	pi;
 	char		ps[9];
 	
 	uint16_t	Year;
@@ -102,13 +122,21 @@ class DAB {
     void (*_Callback)(void);
     void DataService(void);
     void get_ensemble_info(void);
+	void get_audio_info(void);
+	void get_service_info(uint32_t serviceID);
+	void get_subchan_info(uint32_t serviceID, uint32_t compID);
+	void get_digrad_status(void);
     void parse_service_list(void);
+	bool parse_service_list(bool first, uint8_t* data, uint16_t len);
     void parse_service_data(void);
 	void si468x_get_part_info(void);
 	void si468x_get_func_info(void);    
 	void si468x_fm_rsq_status(void);
 	void si468x_get_fm_rds_status(void);
 	uint16_t decode_rds_group(uint16_t blockA, uint16_t blockB, uint16_t blockC, uint16_t blockD);
+	bool		dab;
+	uint32_t	serviceID;
+	uint32_t	compID;
 
 	uint8_t		last_text_ab_state;
 	uint16_t	rdsdata;

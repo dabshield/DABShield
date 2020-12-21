@@ -11,9 +11,51 @@
 // v0.8 06/12/2017 - Added FM/RDS Functionality
 // v0.9 05/09/2019 - Enhanced FM functionality (seek/scan)
 // v1.0 23/09/2020 - Added ESP32 D1 R32 Support
+// v1.1 11/12/2020 - Added DAB Status, Mono and Mute
 ///////////////////////////////////////////////////////////
 #include <SPI.h>
 #include <DABShield.h>
+
+//In order to compile for the UNO, all strings are put into flash (PROGRAM MEMORY)
+const char pty_0[] PROGMEM =  "None";
+const char pty_1[] PROGMEM =  "News";
+const char pty_2[] PROGMEM =  "Current affairs";
+const char pty_3[] PROGMEM =  "Information";
+const char pty_4[] PROGMEM =  "Sport";
+const char pty_5[] PROGMEM =  "Education";
+const char pty_6[] PROGMEM =  "Drama";
+const char pty_7[] PROGMEM =  "Culture";
+const char pty_8[] PROGMEM =  "Science";
+const char pty_9[] PROGMEM =  "Varied";
+const char pty_10[] PROGMEM =  "Pop music";
+const char pty_11[] PROGMEM =  "Rock music";
+const char pty_12[] PROGMEM =  "Easy listening music";
+const char pty_13[] PROGMEM =  "Light classical";
+const char pty_14[] PROGMEM =  "Serious classical";
+const char pty_15[] PROGMEM =  "Other music";
+const char pty_16[] PROGMEM =  "Weather";
+const char pty_17[] PROGMEM =  "Finance";
+const char pty_18[] PROGMEM =  "Children’s programmes";
+const char pty_19[] PROGMEM =  "Social Affairs";
+const char pty_20[] PROGMEM =  "Religion";
+const char pty_21[] PROGMEM =  "Phone In";
+const char pty_22[] PROGMEM =  "Travel";
+const char pty_23[] PROGMEM =  "Leisure";
+const char pty_24[] PROGMEM =  "Jazz music";
+const char pty_25[] PROGMEM =  "Country music";
+const char pty_26[] PROGMEM =  "National music";
+const char pty_27[] PROGMEM =  "Oldies music";
+const char pty_28[] PROGMEM =  "Folk music";
+const char pty_29[] PROGMEM =  "Documentary";
+const char pty_30[] PROGMEM =  "Alarm test";
+const char pty_31[] PROGMEM =  "Alarm";
+const char *const pty[] PROGMEM = {pty_0,pty_1,pty_2,pty_3,pty_4,pty_5,pty_6,pty_7,pty_8,pty_9,pty_10,pty_11,pty_12,pty_13,pty_14,pty_15,pty_16,pty_17,pty_18,pty_19,pty_20,pty_21,pty_22,pty_23,pty_24,pty_25,pty_26,pty_27,pty_28,pty_29,pty_30,pty_31};
+
+const char mode_0[] PROGMEM = "Dual";
+const char mode_1[] PROGMEM = "Mono";
+const char mode_2[] PROGMEM = "Stereo";
+const char mode_3[] PROGMEM = "Joint Stereo";
+const char *const audiomode[] PROGMEM = {mode_0,mode_1,mode_2,mode_3};
 
 //#define DAB_SPI_BITBANG
 
@@ -64,7 +106,7 @@ void setup() {
   Serial.begin(115200);
   while(!Serial);
 
-  Serial.print(F("                    AVIT DAB 2017-19\n\n")); 
+  Serial.print(F("                    AVIT DAB 2017-20\n\n")); 
   
   //Enable SPI
 #ifdef DAB_SPI_BITBANG
@@ -110,14 +152,14 @@ void ServiceData(void)
   {
     char statusstring[72];
 
-    sprintf(statusstring,"%02d/%02d/%04d ", Dab.Days, Dab.Months, Dab.Year);
-    Serial.print(statusstring);
-    sprintf(statusstring,"%02d:%02d ",Dab.Hours, Dab.Minutes);
-    Serial.print(statusstring);
-    sprintf(statusstring,"%s ",Dab.ps);
-    Serial.print(statusstring);
-    sprintf(statusstring,"%s\n",Dab.ServiceData);
-    Serial.print(statusstring);
+	sprintf_P(statusstring, PSTR("%02d/%02d/%04d "), Dab.Days, Dab.Months, Dab.Year);
+	Serial.print(statusstring);
+	sprintf_P(statusstring, PSTR("%02d:%02d "),Dab.Hours, Dab.Minutes);
+	Serial.print(statusstring);
+	sprintf_P(statusstring, PSTR("%s "),Dab.ps);
+	Serial.print(statusstring);
+	sprintf_P(statusstring, PSTR("%s\n"),Dab.ServiceData);
+	Serial.print(statusstring);
   }
 }
 
@@ -238,6 +280,10 @@ void Help_Menu(void)
     Serial.print(F("scan                     - lists available stations\n"));
   }
   Serial.print(F("volume <n>               - set volume 0 - 63\n"));
+  Serial.print(F("mono                     - set audio mode to mono\n"));
+  Serial.print(F("stereo                   - set audio mode to stereo\n"));
+  Serial.print(F("mute <on/off/left/right> - mutes/unmutes audio\n"));
+  Serial.print(F("status                   - displays audio/recpetion info\n"));
   Serial.print(F("help                     - displays this menu\n"));
   Serial.print(F("________________________________________________________\n\n"));
 }
@@ -246,7 +292,7 @@ void process_command(char *command)
 {
   char *cmd;
   cmd = strtok(command, " \r");
-  if (strcmp(cmd, "tune") == 0)
+  if (strcmp_P(cmd, PSTR("tune")) == 0)
   {
     cmd = strtok(NULL, " \r");
     if(dabmode == true)
@@ -275,7 +321,7 @@ void process_command(char *command)
       }
     }
   }
-  else if (strcmp(cmd, "service") == 0)
+  else if (strcmp_P(cmd, PSTR("service")) == 0)
   {
     cmd = strtok(NULL, " \r");
     service = (uint8_t)strtol(cmd, NULL, 10);
@@ -283,17 +329,17 @@ void process_command(char *command)
     Serial.print(Dab.service[service].Label);
     Serial.print(F("\n"));
   }
-  else if (strcmp(cmd, "volume") == 0)
+  else if (strcmp_P(cmd, PSTR("volume")) == 0)
   {
     cmd = strtok(NULL, " \r");
     vol = (uint8_t)strtol(cmd, NULL, 10);
     Dab.vol(vol);
   }
-  else if (strcmp(cmd, "info") == 0)
+  else if (strcmp_P(cmd, PSTR("info")) == 0)
   {
     Ensemble_Info();
   }
-  else if (strcmp(cmd, "scan") == 0)
+  else if (strcmp_P(cmd, PSTR("scan")) == 0)
   {
     if(dabmode == true)
     {
@@ -317,6 +363,34 @@ void process_command(char *command)
     dabmode = true;
     Help_Menu();
   }  
+  else if (strcmp(cmd, "mono") == 0)
+  {
+    Dab.mono(true);
+  }
+  else if (strcmp(cmd, "stereo") == 0)
+  {
+    Dab.mono(false);
+  }
+  else if (strcmp(cmd, "mute") == 0)
+  {
+    cmd = strtok(NULL, " \r");
+    if(strcmp(cmd, "on") == 0)
+    {
+      Dab.mute(true, true);  
+    }
+    else if(strcmp(cmd, "off") == 0)
+    {
+      Dab.mute(false, false);  
+    }    
+    else if(strcmp(cmd, "left") == 0)
+    {
+      Dab.mute(true, false);  
+    }    
+    else if(strcmp(cmd, "right") == 0)
+    {
+      Dab.mute(false, true);  
+    }    
+  }  
   else if (strcmp(cmd, "seek") == 0)
   {
     bool valid = false;
@@ -336,7 +410,14 @@ void process_command(char *command)
   }
   else if (strcmp(cmd, "status") == 0)
   {
-    FM_status(); 
+    if(dabmode == true)
+    { 
+       DAB_status(); 
+    }
+    else
+    {
+    	FM_status(); 
+  	}
   }
   else if (strcmp(cmd, "time") == 0)
   {
@@ -418,6 +499,27 @@ void DAB_scan(void)
   Serial.print(F("\n\n"));
 }
 
+void DAB_status(void)
+{
+  char dabstring[32];
+  Dab.status();
+  Serial.print(Dab.service[service].Label);
+  Serial.print(F("\n"));
+  sprintf(dabstring,"PTY = %s (%d)\n", pty[Dab.pty], Dab.pty);
+  Serial.print(dabstring); 
+
+  sprintf(dabstring,"Bit Rate = %d kHz, ", Dab.bitrate);
+  Serial.print(dabstring);
+  sprintf(dabstring,"Sample Rate = %d Hz, ", Dab.samplerate);
+  Serial.print(dabstring); 
+  sprintf(dabstring,"Audio Mode = %s (%d)\n", audiomode[Dab.mode], Dab.mode);
+  Serial.print(dabstring); 
+  
+  sprintf(dabstring,"RSSI = %d, SNR = %d, Quality = %d%, ", Dab.signalstrength, Dab.snr, Dab.quality);
+  Serial.print(dabstring); 
+  Serial.print(F("\n"));  
+}
+
 void FM_status(void)
 {
   char freqstring[32];
@@ -441,6 +543,8 @@ void FM_scan(void)
   while(Dab.seek(1, 0) == true)
   {
     FM_status();
+    if(Dab.freq == 10790)
+      break;
   }
   Dab.tune(startfreq);
   Dab.vol(vol);

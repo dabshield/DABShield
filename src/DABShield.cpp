@@ -15,12 +15,13 @@
 // v1.1.3 01/07/2020 - Updated Version Format for Arduino IDE Managed Libraries
 // v1.2.0 15/07/2020 - Prevent DLS Tag Command being sent as DLS Message
 // v1.3.0 15/07/2020 - Added ESP32 D1 R32 Support
+// v1.4.0 10/12/2020 - Added Audio Status
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
 
 #define LIBMAJOR	1
-#define LIBMINOR	3
+#define LIBMINOR	4
 
 #define SI46XX_RD_REPLY 				0x00
 #define SI46XX_POWER_UP 				0x01
@@ -30,6 +31,7 @@
 #define SI46XX_BOOT 					0x07
 #define SI46XX_GET_PART_INFO 				0x08
 #define SI46XX_GET_SYS_STATE 				0x09
+#define SI46XX_READ_OFFSET					0x10
 
 #define SI46XX_GET_FUNC_INFO 				0x12
 
@@ -57,6 +59,7 @@
 #define SI46XX_GET_TIME						0xBC
 #define SI46XX_DAB_GET_AUDIO_INFO 			0xBD
 #define SI46XX_DAB_GET_SUBCHAN_INFO 			0xBE
+#define SI46XX_DAB_GET_SERVICE_INFO			0xC0
 
 #if defined(ARDUINO_ARCH_ESP32)
 const byte interruptPin = 26;
@@ -68,8 +71,8 @@ const byte DABResetPin = 7;
 const byte PwrEn = 6;
 #endif
 
-#define SPI_BUFF_SIZE	768
-unsigned char spiBuf[SPI_BUFF_SIZE];
+#define SPI_BUFF_SIZE	512
+unsigned char spiBuf[SPI_BUFF_SIZE + 8];
 uint8_t command_error;
 
 static void si468x_reset(void);
@@ -88,6 +91,7 @@ static void si468x_power_up(void);
 static void si468x_power_down(void);
 static void si468x_load_init(void);
 static void si468x_host_load(void);
+static void si468x_readoffset(uint16_t offset);
 
 static void si468x_flash_set_property(uint16_t property, uint16_t value);
 static void si468x_set_property(uint16_t property, uint16_t value);
@@ -101,6 +105,9 @@ static void si468x_get_digital_service_data(void);
 static void si468x_dab_get_event_status(void);
 static void si468x_get_digital_service_list(void);
 static void si468x_get_digital_service_data(void);
+static void si468x_get_audio_info(void);
+static void si468x_get_service_info(uint32_t serviceID);
+static void si468x_get_subchan_info(uint32_t serviceID, uint32_t compID);
 static bool DAB_service_valid(void);
 static void DAB_wait_service_list(void);
 static void WriteSpiMssg(unsigned char *data, uint32_t len);
@@ -109,6 +116,8 @@ DAB::DAB()
 {
 	LibMajor = LIBMAJOR;
 	LibMinor = LIBMINOR;
+	bitrate = 0;
+	samplerate = 0;
 	pinMode(DABResetPin, OUTPUT);
 	pinMode(PwrEn,OUTPUT);
 	pinMode(interruptPin, INPUT_PULLUP);
@@ -130,8 +139,10 @@ void DAB::setCallback(void (*ServiceData)(void))
 void DAB::DataService(void)
 {
 	si468x_response();
+	uint8_t status0 = spiBuf[1];
+	uint8_t status1 = spiBuf[2];
 	//DSRVINT
-	if ((spiBuf[1] & 0x10) == 0x10)
+	if ((status0 & 0x10) == 0x10)
 	{
 		si468x_get_digital_service_data();
 		si468x_responseN(20);
@@ -148,7 +159,7 @@ void DAB::DataService(void)
 		_Callback();
 	}
 	//RDSINT
-	if ((spiBuf[1] & 0x04) == 0x04)
+	if ((status0 & 0x04) == 0x04)
 	{
 		si468x_get_fm_rds_status();
 		if(rdsdata != 0)
@@ -164,6 +175,7 @@ void DAB::begin(void)
 	si468x_init_dab();
 	si468x_get_part_info();
 	si468x_get_func_info();
+	dab = true;
 	error = command_error;
 }
 
@@ -177,12 +189,14 @@ void DAB::begin(uint8_t band)
 		si468x_init_dab();
 		si468x_get_part_info();
 		si468x_get_func_info();
+		dab = true;
 	}
 	else if(band == 1)
 	{
 		si468x_init_fm();
 		si468x_get_part_info();
 		si468x_get_func_info();
+		dab = false;
 	}
 	error = command_error;
 }
@@ -218,6 +232,9 @@ void DAB::tuneservice(uint8_t freq, uint32_t serviceID, uint32_t CompID)
 		si468x_dab_tune_freq(freq_index);
 	}
 
+	DAB::serviceID = serviceID;
+	DAB::compID = CompID;
+
 	timeout = 1000;
 	do
 	{
@@ -247,20 +264,36 @@ bool DAB::seek(uint8_t dir, uint8_t wrap)
 {
 	si468x_fm_seek(dir, wrap);
 	si468x_fm_rsq_status();
+	uint8_t i;
+	for(i=0; i<9; i++) {ps[i] = 0;}
+	for(i=0; i<DAB_MAX_SERVICEDATA_LEN; i++) {ServiceData[i] = 0;}
 	error = command_error;
 	return valid;
 }
 
 bool DAB::status(void)
 {
-	si468x_fm_rsq_status();
-	error = command_error;
-	return valid;
+	if(dab == true)
+	{
+		get_digrad_status();
+		get_audio_info();
+		get_service_info(serviceID);
+		get_subchan_info(serviceID, compID);
+		return true;
+	}
+	else
+	{
+		si468x_fm_rsq_status();
+		error = command_error;
+		return valid;
+	}
 }
 
 void DAB::set_service(uint8_t index)
 {
 	si468x_start_digital_service(service[index].ServiceID, service[index].CompID);
+	serviceID = service[index].ServiceID;
+	compID = service[index].CompID;
 	error = command_error;
 }
 
@@ -335,15 +368,78 @@ void DAB::get_ensemble_info(void)
 		si468x_get_digital_service_list();
 		si468x_responseN(6);
 
-		int16_t len = spiBuf[5] + (spiBuf[6] << 8);
+		int16_t len = spiBuf[5] + (spiBuf[6] << 8) + 2;
 
-		si468x_responseN(len + 4);
-		parse_service_list();
+		if(len < SPI_BUFF_SIZE)
+		{
+			si468x_responseN(len + 4);
+			parse_service_list();
+		}
+		else
+		{
+			uint16_t offset = 0;
+			bool first = true;
+			while(len >= SPI_BUFF_SIZE)
+			{
+				si468x_readoffset(offset);
+				si468x_responseN(SPI_BUFF_SIZE + 4);
+				if(parse_service_list(first, &(spiBuf[5]), SPI_BUFF_SIZE) == true)
+				{
+					len = 0;
+				}
+				else
+				{
+					len -= SPI_BUFF_SIZE;
+				}
+				first = false;
+				offset += SPI_BUFF_SIZE;
+			}
+			if(len)
+			{
+				si468x_readoffset(offset);
+				si468x_responseN(len + 4);
+				parse_service_list(first, &(spiBuf[5]), len);
+			}
+		}
 	}
 	else
 	{
 		//No services
 	}
+}
+
+void DAB::get_digrad_status(void)
+{
+	si468x_dab_digrad_status();
+	si468x_responseN(22);
+	
+	signalstrength = spiBuf[7];
+	snr = spiBuf[8];
+	quality = spiBuf[9];
+}
+
+void DAB::get_audio_info(void)
+{
+	si468x_get_audio_info();
+	si468x_responseN(19);
+
+	bitrate = spiBuf[5] + (spiBuf[6] << 8);
+	samplerate = spiBuf[7] + (spiBuf[8] << 8);
+	mode = (AudioMode)(spiBuf[9] & 0x3);
+}
+
+void DAB::get_service_info(uint32_t serviceID)
+{
+	si468x_get_service_info(serviceID);
+	si468x_responseN(19);
+
+	pty = (spiBuf[5] >> 1) & 0x1F;
+}
+
+void DAB::get_subchan_info(uint32_t serviceID, uint32_t compID)
+{
+	si468x_get_subchan_info(serviceID, compID);
+	si468x_responseN(12);
 }
 
 
@@ -375,8 +471,8 @@ static void si468x_init_dab()
 	//Set up INTB
 	si468x_set_property(0x0000, 0x0010);
 
-	si468x_set_property(0x1710, 0xF9FF);
-	si468x_set_property(0x1711, 0x0172);
+	si468x_set_property(0x1710, 0xF83E);
+	si468x_set_property(0x1711, 0x01A4);
 	si468x_set_property(0x1712, 0x0001);
 
 	si468x_set_property(0x8100, 0x0001);	//enable DSRVPCKTINT
@@ -388,8 +484,21 @@ static void si468x_init_fm()
 	si468x_flash_load(0x86000);
 	si468x_boot();
 
+	//FM Seek Settings:
+	//FM_VALID_SNR_THRESHOLD
+	si468x_set_property(0x3204, 10);
+	//FM_VALID_RSSI_THRESHOLD,
+	si468x_set_property(0x3202, 17);
+	//FM_VALID_MAX_TUNE_ERROR
+	si468x_set_property(0x3200, 114);
+
 	//Set up INTB
 	si468x_set_property(0x0000, 0x0004);
+
+	si468x_set_property(0x1710, 0xF83E);
+	si468x_set_property(0x1711, 0x01A4);	
+	si468x_set_property(0x1712, 0x0001);
+
 	si468x_set_property(0x3900, 0x0001);
 	si468x_set_property(0x3C00, 0x0001);
 	si468x_set_property(0x3C01, 0x0010);
@@ -485,6 +594,22 @@ bool DAB::time(DABTime *time)
 	return ret;
 }
 
+void DAB::mono(bool enable)
+{
+	si468x_set_property(0x0302, enable ? 0x01 : 0x00);
+}
+
+void DAB::mute(bool left, bool right)
+{
+	uint8_t mute = 0;
+	if(left == true)
+		mute = 0x01;
+	if(right == true)
+		mute |= 0x02;
+
+	si468x_set_property(0x0301, mute);
+}
+
 
 static void si468x_cts(void)
 {
@@ -527,6 +652,17 @@ static void si468x_responseN(int len)
 	}
 
 	DABSpiMsg(spiBuf, len + 1);
+}
+
+
+static void si468x_readoffset(uint16_t offset)
+{
+	spiBuf[0] = SI46XX_READ_OFFSET;
+	spiBuf[1] = 0x00;
+	spiBuf[2] = offset & 0xff;
+	spiBuf[3] = (offset >> 8) & 0xff;
+	WriteSpiMssg(spiBuf, 4);
+	si468x_cts();
 }
 
 static void si468x_power_up(void)
@@ -683,7 +819,7 @@ static void si468x_fm_seek(uint8_t dir, uint8_t wrap)
 	uint32_t timeout;
 
 	spiBuf[0] = SI46XX_FM_SEEK_START;
-	spiBuf[1] = 0x00;;
+	spiBuf[1] = 0x00;
 	spiBuf[2] = ((dir == 0) ? 0 : 2) | ((wrap == 0) ? 0 : 1);
 	spiBuf[3] = 0x00;
 	spiBuf[4] = 0x00;
@@ -814,6 +950,47 @@ static void si468x_get_digital_service_list(void)
 	si468x_cts();
 }
 
+static void si468x_get_audio_info(void)
+{
+	spiBuf[0] = SI46XX_DAB_GET_AUDIO_INFO;
+	spiBuf[1] = 0x00;
+	WriteSpiMssg(spiBuf, 2);
+	si468x_cts();
+}
+
+static void si468x_get_service_info(uint32_t serviceID)
+{
+	spiBuf[0] = SI46XX_DAB_GET_SERVICE_INFO;
+	spiBuf[1] = 0x00;
+	spiBuf[2] = 0x00;
+	spiBuf[3] = 0x00;
+	spiBuf[4] = serviceID & 0xFF;
+	spiBuf[5] = (serviceID >> 8) & 0xFF;
+	spiBuf[6] = (serviceID >> 16) & 0xFF;
+	spiBuf[7] = (serviceID >> 24) & 0xFF;
+	WriteSpiMssg(spiBuf, 8);
+	si468x_cts();
+}
+
+static void si468x_get_subchan_info(uint32_t serviceID, uint32_t compID)
+{
+	spiBuf[0] = SI46XX_DAB_GET_SUBCHAN_INFO;
+	spiBuf[1] = 0x00;
+	spiBuf[2] = 0x00;
+	spiBuf[3] = 0x00;
+	spiBuf[4] = serviceID & 0xFF;
+	spiBuf[5] = (serviceID >> 8) & 0xFF;
+	spiBuf[6] = (serviceID >> 16) & 0xFF;
+	spiBuf[7] = (serviceID >> 24) & 0xFF;
+	spiBuf[8] = compID & 0xFF;
+	spiBuf[9] = (compID >> 8) & 0xFF;
+	spiBuf[10] = (compID >> 16) & 0xFF;
+	spiBuf[11] = (compID >> 24) & 0xFF;
+
+	WriteSpiMssg(spiBuf, 12);
+	si468x_cts();
+}
+
 static void WriteSpiMssg(unsigned char *data, uint32_t len)
 {
 	DABSpiMsg(data, len);
@@ -882,6 +1059,187 @@ void DAB::parse_service_list(void)
 		service[i].ServiceID = serviceID;
 		service[i].CompID = componentID;
 	}
+}
+
+//Parse by sections...
+bool DAB::parse_service_list(bool first, uint8_t* data, uint16_t len)
+{
+	//Parse the data by byte in blocks
+	static uint16_t listsize;
+	static uint8_t parse_service_state = 0;
+	static uint8_t numberofservices;
+	static uint8_t serviceindex = 0;
+	static uint8_t labelindex = 0;
+	static uint8_t numberofcomponents;
+	static uint8_t compindex = 0;
+	static uint32_t serviceID;
+	static uint32_t componentID;	
+	static uint16_t version;
+
+	uint8_t byte;
+	uint16_t i;
+	bool done = false;
+
+	if(first == true)
+	{
+		parse_service_state = 0;
+	}
+	
+	i = 0;
+	while((i < len) && (done == false))
+	{	
+		byte = data[i];
+		i++;
+		
+		switch(parse_service_state)
+		{
+		case 0: //size LSB
+			listsize = byte;
+			parse_service_state = 1;
+			break;
+		case 1: //size MSB
+			listsize += (byte << 8);
+			parse_service_state = 2;
+			break;
+		case 2: //version LSB
+			version = byte;
+			parse_service_state = 3;
+			break;
+		case 3: //version MSB
+			version += (byte << 8);
+			parse_service_state = 4;
+			break;
+		case 4: //Num of Services
+			serviceindex = 0;
+			numberofservices = byte;
+			if(numberofservices > DAB_MAX_SERVICES)
+				DAB::numberofservices = DAB_MAX_SERVICES;
+			else
+				DAB::numberofservices = numberofservices;						
+			parse_service_state = 5;
+			break;
+		case 5:
+		case 6:
+		case 7:
+			parse_service_state++;
+			serviceindex = 0;
+			break;
+
+		case 8: //ServiceID
+			serviceID = byte;
+			parse_service_state = 9;
+			break;
+		case 9: //ServiceID
+			serviceID += (byte << 8);
+			parse_service_state = 10;
+			break;
+		case 10: //ServiceID
+			serviceID += (byte << 16);
+			parse_service_state = 11;
+			break;
+		case 11: //ServiceID
+			serviceID += (byte << 24);		
+			if(serviceindex < DAB_MAX_SERVICES)
+			{
+				service[serviceindex].ServiceID = serviceID;	
+			}					
+			parse_service_state = 12;
+			break;
+		
+		case 12: // RFU, SrvLinging, Pty, P/D Flag
+			parse_service_state = 13;
+			break;
+		case 13: //Local, DAid, NUM_COMP
+			numberofcomponents = byte & 0x0F;
+			parse_service_state = 14;
+			break;
+		case 14: // RFU, SICharset
+			parse_service_state = 15;
+			break;
+		case 15: // Align
+			parse_service_state = 16;
+			labelindex = 0;
+			break;
+		case 16: //Label...
+			if(serviceindex < DAB_MAX_SERVICES)
+			{
+				service[serviceindex].Label[labelindex] = byte;
+			}
+			labelindex++;
+			if(labelindex >= 16)
+			{
+				if(serviceindex < DAB_MAX_SERVICES)
+				{
+					service[serviceindex].Label[labelindex] = '\0';
+				}
+				if(numberofcomponents > 0)
+				{
+					compindex = 0;
+					parse_service_state = 17;
+				}
+				else
+				{
+					serviceindex++;
+					if((serviceindex >= numberofservices) || (serviceindex >= DAB_MAX_SERVICES))
+					{
+						//Done...
+						done = true;
+						parse_service_state = 0;
+					}
+					else
+					{						
+						parse_service_state = 8;
+					}
+				}
+			}
+			break;
+		case 17: //componentID
+			componentID = byte;
+			parse_service_state = 18;
+			break;
+		case 18: //componentID
+			componentID += (byte << 8);
+			parse_service_state = 19;
+			break;
+		case 19: //componentID
+			componentID += (byte << 16);
+			parse_service_state = 20;
+			break;
+		case 20: //componentID
+			componentID += (byte << 24);
+
+			//currently only support first component...
+			if(compindex == 0)
+			{
+				if(serviceindex < DAB_MAX_SERVICES)
+				{
+					service[serviceindex].CompID = componentID;	
+				}					
+			}
+								
+			compindex++;
+			if(compindex >= numberofcomponents)
+			{
+				serviceindex++;
+				if((serviceindex >= numberofservices) || (serviceindex >= DAB_MAX_SERVICES))					
+				{
+					//Done...	
+					done = true;									
+					parse_service_state = 0;
+				}
+				else
+				{
+					parse_service_state = 8;
+				}
+			}
+			else
+			{
+				parse_service_state = 17;
+			}
+			break;
+		}
+	}
+	return done;
 }
 
 void DAB::parse_service_data(void)
