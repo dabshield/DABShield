@@ -35,7 +35,7 @@ const char pty_14[] PROGMEM =  "Serious classical";
 const char pty_15[] PROGMEM =  "Other music";
 const char pty_16[] PROGMEM =  "Weather";
 const char pty_17[] PROGMEM =  "Finance";
-const char pty_18[] PROGMEM =  "Children’s programmes";
+const char pty_18[] PROGMEM =  "Childrenâ€™s programmes";
 const char pty_19[] PROGMEM =  "Social Affairs";
 const char pty_20[] PROGMEM =  "Religion";
 const char pty_21[] PROGMEM =  "Phone In";
@@ -283,7 +283,7 @@ void Help_Menu(void)
   Serial.print(F("mono                     - set audio mode to mono\n"));
   Serial.print(F("stereo                   - set audio mode to stereo\n"));
   Serial.print(F("mute <on/off/left/right> - mutes/unmutes audio\n"));
-  Serial.print(F("status                   - displays audio/recpetion info\n"));
+  Serial.print(F("status                   - displays audio/reception info\n"));
   Serial.print(F("help                     - displays this menu\n"));
   Serial.print(F("________________________________________________________\n\n"));
 }
