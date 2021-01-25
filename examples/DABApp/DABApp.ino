@@ -283,7 +283,7 @@ void Help_Menu(void)
   Serial.print(F("mono                     - set audio mode to mono\n"));
   Serial.print(F("stereo                   - set audio mode to stereo\n"));
   Serial.print(F("mute <on/off/left/right> - mutes/unmutes audio\n"));
-  Serial.print(F("status                   - displays audio/recpetion info\n"));
+  Serial.print(F("status                   - displays audio/reception info\n"));
   Serial.print(F("help                     - displays this menu\n"));
   Serial.print(F("________________________________________________________\n\n"));
 }
