@@ -505,14 +505,14 @@ void DAB_status(void)
   Dab.status();
   Serial.print(Dab.service[service].Label);
   Serial.print(F("\n"));
-  sprintf(dabstring,"PTY = %s (%d)\n", pty[Dab.pty], Dab.pty);
+  sprintf_P(dabstring,PSTR("PTY = %S (%d)\n"), pgm_read_word(&pty[Dab.pty]), Dab.pty);
   Serial.print(dabstring); 
 
   sprintf(dabstring,"Bit Rate = %d kHz, ", Dab.bitrate);
   Serial.print(dabstring);
   sprintf(dabstring,"Sample Rate = %d Hz, ", Dab.samplerate);
   Serial.print(dabstring); 
-  sprintf(dabstring,"Audio Mode = %s (%d)\n", audiomode[Dab.mode], Dab.mode);
+  sprintf_P(dabstring,PSTR("Audio Mode = %S (%d)\n"), pgm_read_word(&audiomode[Dab.mode]), Dab.mode);
   Serial.print(dabstring); 
   
   sprintf(dabstring,"RSSI = %d, SNR = %d, Quality = %d%, ", Dab.signalstrength, Dab.snr, Dab.quality);
