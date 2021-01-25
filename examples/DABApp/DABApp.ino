@@ -35,7 +35,7 @@ const char pty_14[] PROGMEM =  "Serious classical";
 const char pty_15[] PROGMEM =  "Other music";
 const char pty_16[] PROGMEM =  "Weather";
 const char pty_17[] PROGMEM =  "Finance";
-const char pty_18[] PROGMEM =  "Children’s programmes";
+const char pty_18[] PROGMEM =  "Childrenâ€™s programmes";
 const char pty_19[] PROGMEM =  "Social Affairs";
 const char pty_20[] PROGMEM =  "Religion";
 const char pty_21[] PROGMEM =  "Phone In";
@@ -169,7 +169,7 @@ void loop() {
   if (Serial.available() > 0)
   {
     rxdata[rxindex] = Serial.read();
-    if (rxdata[rxindex] == '\r')  //return
+    if (rxdata[rxindex] == '\r' || rxdata[rxindex] == '\n')  //return or linefeed
     {
       Serial.print(F("\n"));
       rxdata[rxindex] = '\0';
