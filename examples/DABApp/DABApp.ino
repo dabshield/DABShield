@@ -12,6 +12,7 @@
 // v0.9 05/09/2019 - Enhanced FM functionality (seek/scan)
 // v1.0 23/09/2020 - Added ESP32 D1 R32 Support
 // v1.1 11/12/2020 - Added DAB Status, Mono and Mute
+// v1.2 01/11/2021 - Added DAB Service Type, Dab/Dab+
 ///////////////////////////////////////////////////////////
 #include <SPI.h>
 #include <DABShield.h>
@@ -58,6 +59,7 @@ const char mode_3[] PROGMEM = "Joint Stereo";
 const char *const audiomode[] PROGMEM = {mode_0,mode_1,mode_2,mode_3};
 
 //#define DAB_SPI_BITBANG
+//#define ANALOG_VOLUME
 
 #ifdef ARDUINO_ARCH_SAMD
 #define Serial SerialUSB
@@ -165,6 +167,24 @@ void ServiceData(void)
 
 void loop() {
   // put your main code here, to run repeatedly:
+
+#ifdef ANALOG_VOLUME
+  static int volumeADCFilter = -1;
+  //Analogue Volume control...
+  int volumeADC = analogRead(A1);  
+  if (volumeADCFilter == -1)
+    volumeADCFilter =  volumeADC;
+  else
+    volumeADCFilter += (volumeADC - volumeADCFilter) / 64;    
+  
+  byte vollimit = map(volumeADCFilter, 64, 1023, 0, 63);
+  if(vollimit != vol)
+  {
+    vol = vollimit;
+    Dab.vol(vol);
+  }
+#endif
+
   Dab.task();
   if (Serial.available() > 0)
   {
@@ -473,6 +493,19 @@ void Ensemble_Info(void)
     Serial.print(i);
     Serial.print(F(":\t"));
     Serial.print(Dab.service[i].Label);
+    Dab.status(Dab.service[i].ServiceID, Dab.service[i].CompID);
+    if(Dab.type == SERVICE_AUDIO)
+    {
+      Serial.print(F("\t dab"));    
+      if(Dab.dabplus == true) 
+      {
+        Serial.print(F("+"));    
+      }
+    }
+    else if(Dab.type == SERVICE_DATA)
+    {
+      Serial.print(F("\t data"));    
+    }
     Serial.print(F("\n"));
   }
   Serial.print(F("\n"));
@@ -514,6 +547,9 @@ void DAB_status(void)
   Serial.print(dabstring); 
   sprintf_P(dabstring,PSTR("Audio Mode = %S (%d)\n"), pgm_read_word(&audiomode[Dab.mode]), Dab.mode);
   Serial.print(dabstring); 
+
+  sprintf_P(dabstring, PSTR("Serivce Mode = %s\n"), Dab.dabplus == true ? PSTR("dab+") : PSTR("dab"));
+  Serial.print(dabstring);
   
   sprintf(dabstring,"RSSI = %d, SNR = %d, Quality = %d%, ", Dab.signalstrength, Dab.snr, Dab.quality);
   Serial.print(dabstring); 

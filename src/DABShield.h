@@ -13,6 +13,7 @@
 // v0.12 17/12/2019 - Corrected DAB Freqs 
 // v1.1.3 01/07/2020 - Updated Version Format for Arduino IDE Managed Libraries
 // v1.4.0 10/12/2020 - Added Audio Status
+// v1.5.0 01/11/2021 - Added DAB Service Type, Dab/Dab+
 ///////////////////////////////////////////////////////////
 #ifndef DABShield_h
 #define DABShield_h
@@ -28,6 +29,13 @@ const PROGMEM uint32_t dab_freq[] = {174928, 176640, 178352, 180064, 181936, 183
 
 #define DAB_MAX_SERVICES		24
 #define DAB_MAX_SERVICEDATA_LEN	128
+
+typedef enum _ServiceType
+{
+	SERVICE_NONE,
+	SERVICE_AUDIO,
+	SERVICE_DATA
+} ServiceType;
 
 typedef enum _AudioMode
 {
@@ -69,6 +77,7 @@ class DAB {
 	void tune(uint16_t freq_kHz);
 	bool seek(uint8_t dir, uint8_t wrap);
 	bool status(void);
+	bool status(uint32_t serviceID, uint32_t compID);
 	bool time(DABTime *time);
 	void mono(bool enable);
 	void mute(bool left, bool right);
@@ -103,6 +112,7 @@ class DAB {
 
 	uint16_t	bitrate;
 	uint16_t	samplerate;
+	ServiceType	type;
 	AudioMode	mode;
 	bool		dabplus;
 	uint8_t		pty;

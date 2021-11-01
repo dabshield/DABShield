@@ -16,6 +16,7 @@
 // v1.2.0 15/07/2020 - Prevent DLS Tag Command being sent as DLS Message
 // v1.3.0 15/07/2020 - Added ESP32 D1 R32 Support
 // v1.4.0 10/12/2020 - Added Audio Status
+// v1.5.0 01/11/2021 - Added DAB Service Type, Dab/Dab+
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
@@ -289,6 +290,18 @@ bool DAB::status(void)
 	}
 }
 
+bool DAB::status(uint32_t ServiceID, uint32_t CompID)
+{
+	if(dab == true)
+	{
+		get_digrad_status();
+		get_audio_info();
+		get_service_info(ServiceID);
+		get_subchan_info(ServiceID, CompID);
+		return true;
+	}
+}
+
 void DAB::set_service(uint8_t index)
 {
 	si468x_start_digital_service(service[index].ServiceID, service[index].CompID);
@@ -440,6 +453,34 @@ void DAB::get_subchan_info(uint32_t serviceID, uint32_t compID)
 {
 	si468x_get_subchan_info(serviceID, compID);
 	si468x_responseN(12);
+
+	dabplus = false;
+	type = SERVICE_NONE;
+	switch(spiBuf[5])
+	{
+	case 0:
+		type = SERVICE_AUDIO;
+		break;
+	case 1:
+	case 2:
+	case 3:
+		type = SERVICE_DATA;
+		break;
+	case 4:
+		dabplus = true;
+		type = SERVICE_AUDIO;
+		break;
+	case 5:
+		type = SERVICE_AUDIO;
+		break;
+	case 6:
+	case 7:
+	case 8:
+		type = SERVICE_DATA;
+		break;
+	default:
+		break;
+	}
 }
 
 
