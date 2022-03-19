@@ -14,6 +14,7 @@
 // v1.1.3 01/07/2020 - Updated Version Format for Arduino IDE Managed Libraries
 // v1.4.0 10/12/2020 - Added Audio Status
 // v1.5.0 01/11/2021 - Added DAB Service Type, Dab/Dab+
+// v1.5.1 19/03/2022 - Fix ServiceID for AVR (UNO) compiler
 ///////////////////////////////////////////////////////////
 #ifndef DABShield_h
 #define DABShield_h
@@ -27,7 +28,12 @@ const PROGMEM uint32_t dab_freq[] = {174928, 176640, 178352, 180064, 181936, 183
 
 #define DAB_FREQS (sizeof(dab_freq) / sizeof(dab_freq[0]))
 
+#if defined (ARDUINO_AVR_UNO)
 #define DAB_MAX_SERVICES		24
+#else
+#define DAB_MAX_SERVICES		32
+#endif
+
 #define DAB_MAX_SERVICEDATA_LEN	128
 
 typedef enum _ServiceType

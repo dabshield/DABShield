@@ -17,6 +17,7 @@
 // v1.3.0 15/07/2020 - Added ESP32 D1 R32 Support
 // v1.4.0 10/12/2020 - Added Audio Status
 // v1.5.0 01/11/2021 - Added DAB Service Type, Dab/Dab+
+// v1.5.1 19/03/2022 - Fix ServiceID for AVR (UNO) compiler
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
@@ -72,7 +73,12 @@ const byte DABResetPin = 7;
 const byte PwrEn = 6;
 #endif
 
-#define SPI_BUFF_SIZE	512
+#if defined (ARDUINO_AVR_UNO)
+#define SPI_BUFF_SIZE	(256)
+#else
+#define SPI_BUFF_SIZE	(512)
+#endif
+
 unsigned char spiBuf[SPI_BUFF_SIZE + 8];
 uint8_t command_error;
 
@@ -207,6 +213,7 @@ void DAB::tune(uint8_t freq)
 	numberofservices = 0;
 	freq_index = freq;
 	ServiceData[0] = '\0';
+	Ensemble[0] = '\0';
 	si468x_dab_tune_freq(freq_index);
 	if(command_error == 0)
 	{
@@ -226,6 +233,7 @@ void DAB::tuneservice(uint8_t freq, uint32_t serviceID, uint32_t CompID)
 	numberofservices = 0;
 
 	ServiceData[0] = '\0';
+	Ensemble[0] = '\0';
 
 	if(freq_index != freq)
 	{
@@ -1171,18 +1179,18 @@ bool DAB::parse_service_list(bool first, uint8_t* data, uint16_t len)
 			parse_service_state = 9;
 			break;
 		case 9: //ServiceID
-			serviceID += (byte << 8);
+			serviceID += ((uint32_t)byte << 8);
 			parse_service_state = 10;
 			break;
 		case 10: //ServiceID
-			serviceID += (byte << 16);
+			serviceID += ((uint32_t)byte << 16);
 			parse_service_state = 11;
 			break;
 		case 11: //ServiceID
-			serviceID += (byte << 24);		
+			serviceID += ((uint32_t)byte << 24);		
 			if(serviceindex < DAB_MAX_SERVICES)
 			{
-				service[serviceindex].ServiceID = serviceID;	
+				service[serviceindex].ServiceID = serviceID;
 			}					
 			parse_service_state = 12;
 			break;
@@ -1239,15 +1247,15 @@ bool DAB::parse_service_list(bool first, uint8_t* data, uint16_t len)
 			parse_service_state = 18;
 			break;
 		case 18: //componentID
-			componentID += (byte << 8);
+			componentID += ((uint32_t)byte << 8);
 			parse_service_state = 19;
 			break;
 		case 19: //componentID
-			componentID += (byte << 16);
+			componentID += ((uint32_t)byte << 16);
 			parse_service_state = 20;
 			break;
 		case 20: //componentID
-			componentID += (byte << 24);
+			componentID += ((uint32_t)byte << 24);
 
 			//currently only support first component...
 			if(compindex == 0)
