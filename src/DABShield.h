@@ -15,6 +15,7 @@
 // v1.4.0 10/12/2020 - Added Audio Status
 // v1.5.0 01/11/2021 - Added DAB Service Type, Dab/Dab+
 // v1.5.1 19/03/2022 - Fix ServiceID for AVR (UNO) compiler
+// v1.5.2 18/10/2022 - Added EnsembleID and Extended Country Code 
 ///////////////////////////////////////////////////////////
 #ifndef DABShield_h
 #define DABShield_h
@@ -93,6 +94,9 @@ class DAB {
     void vol(uint8_t vol);
     void servicedata(void);
     uint32_t freq_khz(uint8_t index);
+	
+	uint16_t ECC;
+	uint32_t EnsembleID;
     char Ensemble[17];
     char ServiceData[DAB_MAX_SERVICEDATA_LEN];
 	

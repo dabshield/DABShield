@@ -18,6 +18,7 @@
 // v1.4.0 10/12/2020 - Added Audio Status
 // v1.5.0 01/11/2021 - Added DAB Service Type, Dab/Dab+
 // v1.5.1 19/03/2022 - Fix ServiceID for AVR (UNO) compiler
+// v1.5.2 18/10/2022 - Added EnsembleID and Extended Country Code 
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
@@ -379,12 +380,16 @@ void DAB::get_ensemble_info(void)
 		si468x_dab_get_ensemble_info();
 		si468x_responseN(29);
 
+		EnsembleID = spiBuf[5] + (spiBuf[6] << 8);
+
 		uint8_t i;
 		for (i = 0; i < 16; i++)
 		{
 			Ensemble[i] = ((char)spiBuf[7 + i]);
 		}
 		Ensemble[16] = '\0';
+
+		ECC = spiBuf[23];
 
 		si468x_get_digital_service_list();
 		si468x_responseN(6);
@@ -1360,6 +1365,7 @@ void DAB::parse_service_data(void)
 
 #define RDS_GROUP_0A	0
 #define RDS_GROUP_0B	1
+#define RDS_GROUP_1A	2
 #define RDS_GROUP_2A	4
 #define RDS_GROUP_2B	5
 #define RDS_GROUP_4A	8
@@ -1415,6 +1421,11 @@ uint16_t DAB::decode_rds_group(uint16_t blockA, uint16_t blockB, uint16_t blockC
 			}				
 		}
 		ps[8] = '\0';
+		break;
+
+	case RDS_GROUP_1A:
+		if ((blockC & 0x7000) == 0x0000)
+			ECC = blockC & 0xFF;
 		break;
 
 	case RDS_GROUP_2A:
