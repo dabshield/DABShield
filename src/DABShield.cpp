@@ -19,12 +19,13 @@
 // v1.5.0 01/11/2021 - Added DAB Service Type, Dab/Dab+
 // v1.5.1 19/03/2022 - Fix ServiceID for AVR (UNO) compiler
 // v1.5.2 18/10/2022 - Added EnsembleID and Extended Country Code 
+// v1.5.3 02/05/2023 - Added Pin Assignemnts via begin command
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
 
 #define LIBMAJOR	1
-#define LIBMINOR	4
+#define LIBMINOR	5
 
 #define SI46XX_RD_REPLY 				0x00
 #define SI46XX_POWER_UP 				0x01
@@ -65,13 +66,13 @@
 #define SI46XX_DAB_GET_SERVICE_INFO			0xC0
 
 #if defined(ARDUINO_ARCH_ESP32)
-const byte interruptPin = 26;
-const byte DABResetPin = 14;
-const byte PwrEn = 27;
+byte interruptPin = 26;
+byte DABResetPin = 14;
+byte PwrEn = 27;
 #else
-const byte interruptPin = 2;
-const byte DABResetPin = 7;
-const byte PwrEn = 6;
+byte interruptPin = 2;
+byte DABResetPin = 7;
+byte PwrEn = 6;
 #endif
 
 #if defined (ARDUINO_AVR_UNO)
@@ -126,9 +127,6 @@ DAB::DAB()
 	LibMinor = LIBMINOR;
 	bitrate = 0;
 	samplerate = 0;
-	pinMode(DABResetPin, OUTPUT);
-	pinMode(PwrEn,OUTPUT);
-	pinMode(interruptPin, INPUT_PULLUP);
 }
 
 void DAB::task(void)
@@ -177,18 +175,24 @@ void DAB::DataService(void)
 
 void DAB::begin(void)
 {
-	freq_index = -1;
+	begin(0);
+}
 
-	si468x_reset();
-	si468x_init_dab();
-	si468x_get_part_info();
-	si468x_get_func_info();
-	dab = true;
-	error = command_error;
+void DAB::begin(uint8_t band, byte _interruptPin, byte _DABResetPin, byte _PwrEn)
+{
+	interruptPin = _interruptPin;	
+	DABResetPin = _DABResetPin;
+	PwrEn = _PwrEn; 
+
+	begin(band);
 }
 
 void DAB::begin(uint8_t band)
 {
+	pinMode(DABResetPin, OUTPUT);
+	pinMode(PwrEn,OUTPUT);
+	pinMode(interruptPin, INPUT_PULLUP);
+
 	freq_index = -1;
 	
 	si468x_reset();

@@ -16,6 +16,7 @@
 // v1.5.0 01/11/2021 - Added DAB Service Type, Dab/Dab+
 // v1.5.1 19/03/2022 - Fix ServiceID for AVR (UNO) compiler
 // v1.5.2 18/10/2022 - Added EnsembleID and Extended Country Code 
+// v1.5.3 02/05/2023 - Added Pin Assignemnts via begin command
 ///////////////////////////////////////////////////////////
 #ifndef DABShield_h
 #define DABShield_h
@@ -79,6 +80,7 @@ class DAB {
     void setCallback(void (*ServiceData)(void));
     void begin(void);
 	void begin(uint8_t band);
+	void begin(uint8_t band, byte _interruptPin, byte _DABResetPin, byte _PwrEn);
     void tune(uint8_t freq_index);
 	void tuneservice(uint8_t freq, uint32_t serviceID, uint32_t CompID);
 	void tune(uint16_t freq_kHz);
