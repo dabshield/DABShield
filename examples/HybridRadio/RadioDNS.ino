@@ -12,6 +12,7 @@
  *
  */
 #include "RadioDNS.h"
+#include "WiFi.h"
 
 StaticJsonDocument<48> filter;
 StaticJsonDocument<128> doc;
