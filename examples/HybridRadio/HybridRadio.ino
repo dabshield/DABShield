@@ -23,6 +23,7 @@
  * v0.2 07/11/2022 - minor bug fixes
  * v0.3 15/11/2022 - minor bug fixes
  * v0.4 03/05/2023 - Updated for TFT_eSPI library
+ * v2.0 27/02/2025 - Added Support for DAB Shield Pro
  *
  */
 
@@ -30,6 +31,7 @@
 //#define RESISTIVE_TOUCH
 //#define ROWLAND_DISPLAY
 
+#define DABPRO true
 const char *ssid = "WIFI_SSID";
 const char *password = "WIFI_PASSWORD";
 
@@ -245,7 +247,7 @@ void setup() {
   SPI.begin();
 
   Dab.setCallback(ServiceData);
-  Dab.begin();
+  Dab.begin(0, DABPRO);
 
   //FT6236 reset pin - drive high
   pinMode(TS_RESET,OUTPUT);

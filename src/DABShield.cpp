@@ -20,12 +20,15 @@
 // v1.5.1 19/03/2022 - Fix ServiceID for AVR (UNO) compiler
 // v1.5.2 18/10/2022 - Added EnsembleID and Extended Country Code 
 // v1.5.3 02/05/2023 - Added Pin Assignemnts via begin command
+// v2.0.0 27/02/2025 - Added Support for DAB Shield Pro
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
+#include "Wire.h"
+#include "nau8822.h"
 
-#define LIBMAJOR	1
-#define LIBMINOR	5
+#define LIBMAJOR	2
+#define LIBMINOR	0
 
 #define SI46XX_RD_REPLY 				0x00
 #define SI46XX_POWER_UP 				0x01
@@ -121,6 +124,18 @@ static bool DAB_service_valid(void);
 static void DAB_wait_service_list(void);
 static void WriteSpiMssg(unsigned char *data, uint32_t len);
 
+void NAU8822WriteReg(uint8_t reg, uint16_t data)
+{
+	byte i2cdata[2];
+	i2cdata[0] = ((reg << 1) & 0x7E);
+	i2cdata[0] |= (data & 0x100) ? 1 : 0;
+	i2cdata[1] = data & 0xFF;
+	Wire.beginTransmission(0x1A);
+	Wire.write(i2cdata, 2);
+	Wire.endTransmission();
+	//Serial.print("I2C Write %x %x\n", i2cdata[0], i2cdata[1]);
+}
+
 DAB::DAB()
 {
 	LibMajor = LIBMAJOR;
@@ -131,7 +146,7 @@ DAB::DAB()
 
 void DAB::task(void)
 {
-	if(digitalRead(interruptPin) == LOW)
+	//if(digitalRead(interruptPin) == LOW)
 	{
 		DataService();
 	}
@@ -189,6 +204,11 @@ void DAB::begin(uint8_t band, byte _interruptPin, byte _DABResetPin, byte _PwrEn
 
 void DAB::begin(uint8_t band)
 {
+	begin(band, false);
+}
+
+void DAB::begin(uint8_t band, bool pro)
+{
 	pinMode(DABResetPin, OUTPUT);
 	pinMode(PwrEn,OUTPUT);
 	pinMode(interruptPin, INPUT_PULLUP);
@@ -210,7 +230,44 @@ void DAB::begin(uint8_t band)
 		si468x_get_func_info();
 		dab = false;
 	}
+	Pro = pro;
+	if (Pro)
+	{
+		//Initialise I2C
+		Wire.begin();
+		//Initialise the Codec
+		//Master Mode...
+		NAU8822WriteReg(NAU8822_REG_CLOCKING, 0x009);
+		//Power  
+		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_1, 0x00D);
+		//Audio Output
+		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_2, 0x180);
+		//DAC
+		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x00F);
+	}
 	error = command_error;
+}
+
+void DAB::speaker(uint8_t value)
+{
+	//Speaker Output...
+	switch (value)
+	{
+	case 0: //Disable
+		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x00F);
+		NAU8822WriteReg(NAU8822_REG_RIGHT_SPEAKER_CONTROL, 0x000);
+		break;
+
+	case 1: //Stereo
+		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x06F);
+		NAU8822WriteReg(NAU8822_REG_RIGHT_SPEAKER_CONTROL, 0x000);
+		break; 
+
+	case 2: //Differential
+		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x06F);
+		NAU8822WriteReg(NAU8822_REG_RIGHT_SPEAKER_CONTROL, 0x010);
+		break;
+	}
 }
 
 void DAB::tune(uint8_t freq)
@@ -330,8 +387,42 @@ bool DAB::servicevalid(void)
 
 void DAB::vol(uint8_t vol)
 {
-	si468x_set_property(0x0300, (vol & 0x3F));
+	if (Pro)
+	{
+		NAU8822WriteReg(NAU8822_REG_LHP_VOLUME, 0x000 | (vol & 0x3F));
+		NAU8822WriteReg(NAU8822_REG_RHP_VOLUME, 0x100 | (vol & 0x3F));
+		NAU8822WriteReg(NAU8822_REG_LSPKOUT_VOLUME, 0x000 | (vol & 0x3F));
+		NAU8822WriteReg(NAU8822_REG_RSPKOUT_VOLUME, 0x100 | (vol & 0x3F));
+	}
+	else
+	{
+		si468x_set_property(0x0300, (vol & 0x3F));
+	}
 	error = command_error;
+}
+
+void DAB::bass(int8_t level)
+{
+	if (Pro)
+	{
+		NAU8822WriteReg(NAU8822_REG_EQ1, 0x120 | ((12 - level) & 0x1F));
+	}
+}
+
+void DAB::mid(int8_t level)
+{
+	if (Pro)
+	{
+		NAU8822WriteReg(NAU8822_REG_EQ3, 0x120 | ((12 - level) & 0x1F));
+	}
+}
+
+void DAB::treble(int8_t level)
+{
+	if (Pro)
+	{
+		NAU8822WriteReg(NAU8822_REG_EQ5, 0x000 | ((12 - level) & 0x1F));
+	}
 }
 
 uint32_t DAB::freq_khz(uint8_t index)
@@ -535,6 +626,10 @@ static void si468x_init_dab()
 
 	si468x_set_property(0x8100, 0x0001);	//enable DSRVPCKTINT
 	si468x_set_property(0xb400, 0x0007);	//enable XPAD data	
+
+	si468x_set_property(0x0200, 0x0000); // I2S slave mode (0x0000) master: (0x8000)
+	si468x_set_property(0x0201, 48000);  // I2S sample rate
+	si468x_set_property(0x0800, 0x0002); // Digital and analog output (0x0001 analog, 0x0002 digital, 0x0003 both)
 }
 
 static void si468x_init_fm()
@@ -561,6 +656,10 @@ static void si468x_init_fm()
 	si468x_set_property(0x3C00, 0x0001);
 	si468x_set_property(0x3C01, 0x0010);
 	si468x_set_property(0x3C02, 0x0001);
+
+	si468x_set_property(0x0200, 0x0000); // I2S slave mode (0x8000)
+	si468x_set_property(0x0201, 48000);  // I2S sample rate
+	si468x_set_property(0x0800, 0x0002); // Digital and analog output (0x0001 analog, 0x0002 digital, 0x0003 both)
 }
 
 void DAB::si468x_get_part_info(void)

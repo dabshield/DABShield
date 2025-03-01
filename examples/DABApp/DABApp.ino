@@ -13,6 +13,7 @@
 // v1.0 23/09/2020 - Added ESP32 D1 R32 Support
 // v1.1 11/12/2020 - Added DAB Status, Mono and Mute
 // v1.2 01/11/2021 - Added DAB Service Type, Dab/Dab+
+// v2.0 27/02/2025 - Added Support for DAB Shield Pro
 ///////////////////////////////////////////////////////////
 #include <SPI.h>
 #include <DABShield.h>
@@ -60,6 +61,7 @@ const char *const audiomode[] PROGMEM = {mode_0,mode_1,mode_2,mode_3};
 
 //#define DAB_SPI_BITBANG
 //#define ANALOG_VOLUME
+#define DABPRO true
 
 #ifdef ARDUINO_ARCH_SAMD
 #define Serial SerialUSB
@@ -127,7 +129,7 @@ void setup() {
   
   //DAB Setup
   Dab.setCallback(ServiceData);
-  Dab.begin();
+  Dab.begin(0, DABPRO);
 
   if(Dab.error != 0)
   {
@@ -204,57 +206,7 @@ void loop() {
         Serial.print(F("\b \b"));
         rxindex--;
       }
-    }
-    else if (rxdata[rxindex] == '+')
-    {
-      if (vol < 63)
-      {
-        vol++;
-        Dab.vol(vol);
-      }
-    }
-    else if (rxdata[rxindex] == '-')
-    {
-      if (vol > 0)
-      {
-        vol--;
-        Dab.vol(vol);
-      }
-    }
-    else if (rxdata[rxindex] == '<')
-    {
-      if (Dab.numberofservices > 0)
-      {
-        if (service > 0)
-        {
-          service--;
-        }
-        else
-        {
-          service = Dab.numberofservices - 1;
-        }
-        Dab.set_service(service);
-        Serial.print(Dab.service[service].Label);
-        Serial.print(F("\n"));
-      }
-    }
-    else if (rxdata[rxindex] == '>')
-    {
-      if (Dab.numberofservices > 0)
-      {
-        if (service < (Dab.numberofservices - 1))
-        {
-          service++;
-        }
-        else
-        {
-          service = 0;
-        }
-        Dab.set_service(service);
-        Serial.print(Dab.service[service].Label);
-        Serial.print(F("\n"));
-      }
-    }
+    }    
     else  //other char
     {
       Serial.print(rxdata[rxindex]);
@@ -305,6 +257,11 @@ void Help_Menu(void)
   Serial.print(F("mute <on/off/left/right> - mutes/unmutes audio\n"));
   Serial.print(F("status                   - displays audio/reception info\n"));
   Serial.print(F("help                     - displays this menu\n"));
+  Serial.print(F("PRO:\n"));
+  Serial.print(F("spekaer <on/off/stereo>  - enable/disable/dual speaker config"));
+  Serial.print(F("bass <n>                 - set bass -12..0..12\n"));
+  Serial.print(F("mid <n>                  - set mid -12..0..12\n"));
+  Serial.print(F("treble <n>               - set treble -12..0..12\n"));
   Serial.print(F("________________________________________________________\n\n"));
 }
 
@@ -312,6 +269,7 @@ void process_command(char *command)
 {
   char *cmd;
   cmd = strtok(command, " \r");
+
   if (strcmp_P(cmd, PSTR("tune")) == 0)
   {
     cmd = strtok(NULL, " \r");
@@ -355,6 +313,24 @@ void process_command(char *command)
     vol = (uint8_t)strtol(cmd, NULL, 10);
     Dab.vol(vol);
   }
+  else if (strcmp_P(cmd, PSTR("bass")) == 0)
+  {
+    cmd = strtok(NULL, " \r");
+    int8_t level = (int8_t)strtol(cmd, NULL, 10);
+    Dab.bass(level);
+  }
+  else if (strcmp_P(cmd, PSTR("mid")) == 0)
+  {
+    cmd = strtok(NULL, " \r");
+    int8_t level = (int8_t)strtol(cmd, NULL, 10);
+    Dab.mid(level);
+  }
+  else if (strcmp_P(cmd, PSTR("treble")) == 0)
+  {
+    cmd = strtok(NULL, " \r");
+    int8_t level = (int8_t)strtol(cmd, NULL, 10);
+    Dab.treble(level);
+  }
   else if (strcmp_P(cmd, PSTR("info")) == 0)
   {
     Ensemble_Info();
@@ -372,14 +348,14 @@ void process_command(char *command)
   }
   else if (strcmp(cmd, "fm") == 0)
   {
-    Dab.begin(1);
+    Dab.begin(1, DABPRO);
     dabmode = false;
     Dab.tune((uint16_t)8750);
     Help_Menu();
   }  
   else if (strcmp(cmd, "dab") == 0)
   {
-    Dab.begin(0);
+    Dab.begin(0, DABPRO);
     dabmode = true;
     Help_Menu();
   }  
@@ -390,6 +366,22 @@ void process_command(char *command)
   else if (strcmp(cmd, "stereo") == 0)
   {
     Dab.mono(false);
+  }
+  else if (strcmp(cmd, "speaker") == 0)
+  {
+    cmd = strtok(NULL, " \r");
+    if(strcmp(cmd, "off") == 0)
+    {
+      Dab.speaker(0);  
+    }
+    else if(strcmp(cmd, "on") == 0)
+    {
+      Dab.speaker(2);  
+    }
+    if(strcmp(cmd, "stereo") == 0)
+    {
+      Dab.speaker(1);  
+    }
   }
   else if (strcmp(cmd, "mute") == 0)
   {
@@ -538,14 +530,14 @@ void DAB_status(void)
   Dab.status();
   Serial.print(Dab.service[service].Label);
   Serial.print(F("\n"));
-  sprintf_P(dabstring,PSTR("PTY = %S (%d)\n"), pgm_read_word(&pty[Dab.pty]), Dab.pty);
+  sprintf_P(dabstring,PSTR("PTY = %s (%d)\n"), pgm_read_word(&pty[Dab.pty]), Dab.pty);
   Serial.print(dabstring); 
 
   sprintf(dabstring,"Bit Rate = %d kHz, ", Dab.bitrate);
   Serial.print(dabstring);
   sprintf(dabstring,"Sample Rate = %d Hz, ", Dab.samplerate);
   Serial.print(dabstring); 
-  sprintf_P(dabstring,PSTR("Audio Mode = %S (%d)\n"), pgm_read_word(&audiomode[Dab.mode]), Dab.mode);
+  sprintf_P(dabstring,PSTR("Audio Mode = %s (%d)\n"), pgm_read_word(&audiomode[Dab.mode]), Dab.mode);
   Serial.print(dabstring); 
 
   sprintf_P(dabstring, PSTR("Serivce Mode = %s\n"), Dab.dabplus == true ? PSTR("dab+") : PSTR("dab"));
@@ -567,7 +559,9 @@ void FM_status(void)
   sprintf(freqstring,"RSSI = %d, ",Dab.signalstrength);
   Serial.print(freqstring);
   sprintf(freqstring,"SNR = %d\n",Dab.snr);
-  Serial.print(freqstring);     
+  Serial.print(freqstring);
+  sprintf(freqstring, "ECC: %x\n", Dab.ECC);
+  Serial.print(freqstring);
 }
 
 void FM_scan(void)

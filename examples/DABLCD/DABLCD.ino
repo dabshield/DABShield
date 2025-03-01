@@ -20,6 +20,7 @@
 // v0.9 05/06/2020 - non volatile memory storeage for Due
 // v1.0 16/07/2020 - Display mapping for EU chars, Interface speed up for next/previous
 // v1.1 23/09/2020 - Added ESP32 D1 R32 Support
+// v2.0 27/02/2025 - Added Support for DAB Shield Pro
 ////////////////////////////////////////////////////////////
 #include "Arduino.h"
 
@@ -29,6 +30,8 @@
 #include <Wire.h>
 #include <Adafruit_RGBLCDShield.h>
 #include <utility/Adafruit_MCP23017.h>
+
+#define DABPRO true
 
 #ifdef ARDUINO_ARCH_SAMD
 #define Serial SerialUSB
@@ -259,7 +262,7 @@ void setup() {
 
   //DAB Setup
   Dab.setCallback(ServiceData);
-  Dab.begin();
+  Dab.begin(0, DABPRO);
 
   if (Dab.error != 0)
   {
@@ -331,7 +334,7 @@ void setup() {
       }
       else
       {
-        Dab.begin(1);
+        Dab.begin(1, DABPRO);
         Dab.tune(fm_freq);
         Dab.vol(vol);
       }
@@ -730,7 +733,7 @@ void process_buttons(uint8_t buttons)
       {
         if (buttons & BUTTON_SELECT)
         {
-          Dab.begin(1);
+          Dab.begin(1, DABPRO);
           Dab.tune(fm_freq);
 #ifdef USE_EEPROM
           writeCurrrentSettingsToFlash = true;
@@ -785,7 +788,7 @@ void process_buttons(uint8_t buttons)
       {
         if (buttons & BUTTON_SELECT)
         {
-          Dab.begin(0);
+          Dab.begin(0, DABPRO);
           if (NumOfEnsembles > 0)
           {
             lcd.clear();
