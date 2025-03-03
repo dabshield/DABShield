@@ -214,7 +214,8 @@ void DAB::begin(uint8_t band, bool pro)
 	pinMode(interruptPin, INPUT_PULLUP);
 
 	freq_index = -1;
-	
+	Pro = pro;
+
 	si468x_reset();
 	if(band == 0)
 	{
@@ -230,9 +231,14 @@ void DAB::begin(uint8_t band, bool pro)
 		si468x_get_func_info();
 		dab = false;
 	}
-	Pro = pro;
+
 	if (Pro)
 	{
+		//Set up Digital Audio Slave
+		si468x_set_property(0x0200, 0x0000); // I2S slave mode
+		si468x_set_property(0x0201, 48000);  // I2S sample rate
+		si468x_set_property(0x0800, 0x0002); // Digital Output Enable
+
 		//Initialise I2C
 		Wire.begin();
 		//Initialise the Codec
@@ -626,10 +632,6 @@ static void si468x_init_dab()
 
 	si468x_set_property(0x8100, 0x0001);	//enable DSRVPCKTINT
 	si468x_set_property(0xb400, 0x0007);	//enable XPAD data	
-
-	si468x_set_property(0x0200, 0x0000); // I2S slave mode (0x0000) master: (0x8000)
-	si468x_set_property(0x0201, 48000);  // I2S sample rate
-	si468x_set_property(0x0800, 0x0002); // Digital and analog output (0x0001 analog, 0x0002 digital, 0x0003 both)
 }
 
 static void si468x_init_fm()
@@ -656,10 +658,6 @@ static void si468x_init_fm()
 	si468x_set_property(0x3C00, 0x0001);
 	si468x_set_property(0x3C01, 0x0010);
 	si468x_set_property(0x3C02, 0x0001);
-
-	si468x_set_property(0x0200, 0x0000); // I2S slave mode (0x8000)
-	si468x_set_property(0x0201, 48000);  // I2S sample rate
-	si468x_set_property(0x0800, 0x0002); // Digital and analog output (0x0001 analog, 0x0002 digital, 0x0003 both)
 }
 
 void DAB::si468x_get_part_info(void)
