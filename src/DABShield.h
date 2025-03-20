@@ -18,6 +18,7 @@
 // v1.5.2 18/10/2022 - Added EnsembleID and Extended Country Code 
 // v1.5.3 02/05/2023 - Added Pin Assignemnts via begin command
 // v2.0.0 27/02/2025 - Added Support for DAB Shield Pro
+// v2.0.2 20/03/2025 - Added Auto detect of DAB Shield Pro
 ///////////////////////////////////////////////////////////
 #ifndef DABShield_h
 #define DABShield_h
@@ -38,6 +39,13 @@ const PROGMEM uint32_t dab_freq[] = {174928, 176640, 178352, 180064, 181936, 183
 #endif
 
 #define DAB_MAX_SERVICEDATA_LEN	128
+
+typedef enum _DABSpeaker
+{
+	SPEAKER_NONE,
+	SPEAKER_DIFF,
+	SPEAKER_STEREO
+} DABSpeaker;
 
 typedef enum _ServiceType
 {
@@ -81,7 +89,6 @@ class DAB {
     void setCallback(void (*ServiceData)(void));
     void begin(void);
 	void begin(uint8_t band);
-	void begin(uint8_t band, bool pro);
 	void begin(uint8_t band, byte _interruptPin, byte _DABResetPin, byte _PwrEn);
     void tune(uint8_t freq_index);
 	void tuneservice(uint8_t freq, uint32_t serviceID, uint32_t CompID);
@@ -92,7 +99,7 @@ class DAB {
 	bool time(DABTime *time);
 	void mono(bool enable);
 	void mute(bool left, bool right);
-	void speaker(uint8_t value);
+	void speaker(DABSpeaker value);
 	void bass(int8_t level);
 	void mid(int8_t level);
 	void treble(int8_t level);
@@ -136,7 +143,7 @@ class DAB {
 	bool		dabplus;
 	uint8_t		pty;
 
-
+	DABSpeaker	speakeroutput;
 
 	uint16_t	pi;
 	char		ps[9];

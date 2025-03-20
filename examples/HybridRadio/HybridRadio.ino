@@ -31,7 +31,6 @@
 //#define RESISTIVE_TOUCH
 //#define ROWLAND_DISPLAY
 
-#define DABPRO true
 const char *ssid = "WIFI_SSID";
 const char *password = "WIFI_PASSWORD";
 
@@ -247,7 +246,8 @@ void setup() {
   SPI.begin();
 
   Dab.setCallback(ServiceData);
-  Dab.begin(0, DABPRO);
+  Dab.speaker(SPEAKER_OUTPUT);
+  Dab.begin(0);
 
   //FT6236 reset pin - drive high
   pinMode(TS_RESET,OUTPUT);
@@ -255,6 +255,10 @@ void setup() {
 
 #if defined ROWLAND_DISPLAY
   ts.begin(40, I2C_SDA, I2C_SCL);
+  #ifdef ROWLAND_IFS_DISPLAY
+  //For the inverted IPS display supplied with DABSHIELDV3
+  tft.invertDisplay(true);
+  #endif
 #elif defined DFROBOT_DISPLAY
   ts.begin();
   ts.setRotation(0);

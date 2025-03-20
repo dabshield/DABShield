@@ -22,6 +22,11 @@
 // v1.1 23/09/2020 - Added ESP32 D1 R32 Support
 // v2.0 27/02/2025 - Added Support for DAB Shield Pro
 ////////////////////////////////////////////////////////////
+
+/*********  DAB SHIELD V3.0 **********/
+// Setup up Speaker output.
+#define SPEAKER_OUTPUT  SPEAKER_DIFF   //SPEAKER_NONE, SPEAKER_DIFF, SPEAKER_STEREO
+
 #include "Arduino.h"
 
 #include <SPI.h>
@@ -31,7 +36,10 @@
 #include <Adafruit_RGBLCDShield.h>
 #include <utility/Adafruit_MCP23017.h>
 
-#define DABPRO true
+#if defined(ARDUINO_UNOR4_MINIMA) || defined (ARDUINO_UNOR4_WIFI)
+#define USE_EEPROM
+#include "EEPROM.h"
+#endif
 
 #ifdef ARDUINO_ARCH_SAMD
 #define Serial SerialUSB
@@ -165,17 +173,7 @@ void DAB_VolDown(void);
 #define MAGIC 8500
 int16_t magic_check;
 
-#ifdef DUE_FLASH 
-  //define the storeage locations in flash.
-  #define FLASH_ensemble        0 //byte
-  #define FLASH_service         1 //byte
-  #define FLASH_vol             2 //byte
-  #define FLASH_dab_mode        3 //byte
-  #define FLASH_NumOfEnsembles  4 //byte  
-  #define FLASH_magic_check     8 //&9 word
-  #define FLASH_fm_freq         12 //&13 word
-  #define FLASH_Ensembles       16 //and lots more
-#else
+#ifdef ARDUINO_ARCH_SAMD
   typedef struct _FlashStorage_Ensembles
   {
     DABEnsembles Ensemble[16];
@@ -189,6 +187,16 @@ int16_t magic_check;
   FlashStorage(LastVolume_storage, uint8_t);
   FlashStorage(DabMode_storage, uint8_t);
   FlashStorage(FMFreq_storage, uint16_t);
+#else
+  //define the storeage locations in flash.
+  #define FLASH_ensemble        0 //byte
+  #define FLASH_service         1 //byte
+  #define FLASH_vol             2 //byte
+  #define FLASH_dab_mode        3 //byte
+  #define FLASH_NumOfEnsembles  4 //byte  
+  #define FLASH_magic_check     8 //&9 word
+  #define FLASH_fm_freq         12 //&13 word
+  #define FLASH_Ensembles       16 //and lots more
 #endif
 #endif
 
@@ -262,7 +270,8 @@ void setup() {
 
   //DAB Setup
   Dab.setCallback(ServiceData);
-  Dab.begin(0, DABPRO);
+  Dab.speaker(SPEAKER_OUTPUT);
+  Dab.begin(0);
 
   if (Dab.error != 0)
   {
@@ -278,10 +287,14 @@ void setup() {
       NumOfEnsembles = dueFlashStorage.read(FLASH_NumOfEnsembles);
       dab_mode = dueFlashStorage.read(FLASH_dab_mode);
       memcpy(&magic_check, dueFlashStorage.readAddress(FLASH_magic_check), sizeof(magic_check));     
-    #else
+    #elif ARDUINO_ARCH_SAMD
       NumOfEnsembles = NumOfEnsembles_storage.read();
       magic_check = magic_check_storage.read();
       dab_mode = DabMode_storage.read();
+    #else
+      NumOfEnsembles = EEPROM.read(FLASH_NumOfEnsembles);
+      dab_mode = EEPROM.read(FLASH_dab_mode);
+      EEPROM.get(FLASH_magic_check, magic_check);
     #endif
     
     buttons = lcd.readButtons();
@@ -308,7 +321,7 @@ void setup() {
         dab_mode = dueFlashStorage.read(FLASH_dab_mode);
         memcpy(&fm_freq , dueFlashStorage.readAddress(FLASH_fm_freq), sizeof(fm_freq));  
         memcpy(&Ensemble[0], dueFlashStorage.readAddress(FLASH_Ensembles), sizeof(Ensemble));        
-      #else      
+      #elif ARDUINO_ARCH_SAMD
         NumOfEnsembles = NumOfEnsembles_storage.read();
         Ensemble_storage.read(pEnsemples);
         service = LastPlayedService_storage.read();
@@ -316,6 +329,13 @@ void setup() {
         vol = LastVolume_storage.read();
         dab_mode = DabMode_storage.read();
         fm_freq = FMFreq_storage.read();
+      #else
+        service = EEPROM.read(FLASH_service);
+        ensemble = EEPROM.read(FLASH_ensemble);
+        vol = EEPROM.read(FLASH_vol);
+        dab_mode = EEPROM.read(FLASH_dab_mode);
+        EEPROM.get(FLASH_fm_freq, fm_freq);
+        EEPROM.get(FLASH_Ensembles, Ensemble);
       #endif
       
       Dab.vol(vol);
@@ -334,7 +354,7 @@ void setup() {
       }
       else
       {
-        Dab.begin(1, DABPRO);
+        Dab.begin(1);
         Dab.tune(fm_freq);
         Dab.vol(vol);
       }
@@ -371,7 +391,7 @@ void ScanforServices(void)
     dueFlashStorage.write(FLASH_magic_check, (uint8_t *)&magic_check, sizeof(magic_check));
     dueFlashStorage.write(FLASH_fm_freq, (uint8_t *)&fm_freq, sizeof(fm_freq));
     dueFlashStorage.write(FLASH_Ensembles, (uint8_t *)&Ensemble[0], sizeof(Ensemble));        
-  #else
+   #elif ARDUINO_ARCH_SAMD
     magic_check_storage.write(magic_check);
     NumOfEnsembles_storage.write(NumOfEnsembles);
     Ensemble_storage.write(*pEnsemples);
@@ -380,6 +400,15 @@ void ScanforServices(void)
     DabMode_storage.write(dab_mode);
     LastVolume_storage.write(vol);
     FMFreq_storage.write(fm_freq);
+  #else
+    EEPROM.write(FLASH_NumOfEnsembles, NumOfEnsembles);
+    EEPROM.write(FLASH_ensemble, ensemble);
+    EEPROM.write(FLASH_service, service);
+    EEPROM.write(FLASH_dab_mode, dab_mode);
+    EEPROM.write(FLASH_vol, vol);
+    EEPROM.put(FLASH_magic_check, magic_check);
+    EEPROM.put(FLASH_fm_freq, fm_freq);
+    EEPROM.put(FLASH_Ensembles, Ensemble);    
   #endif
 #endif
 
@@ -447,12 +476,18 @@ void loop() {
       dueFlashStorage.write(FLASH_dab_mode, dab_mode);
       dueFlashStorage.write(FLASH_vol, vol);
       dueFlashStorage.write(FLASH_fm_freq, (uint8_t *)&fm_freq, sizeof(fm_freq));        
-    #else
+  #elif ARDUINO_ARCH_SAMD
       LastPlayedEnsemble_storage.write(ensemble);
       LastPlayedService_storage.write(service);
       LastVolume_storage.write(vol);
       DabMode_storage.write(dab_mode);
       FMFreq_storage.write(fm_freq);
+   #else
+      EEPROM.write(FLASH_ensemble, ensemble);
+      EEPROM.write(FLASH_service, service);
+      EEPROM.write(FLASH_dab_mode, dab_mode);
+      EEPROM.write(FLASH_vol, vol);
+      EEPROM.put(FLASH_fm_freq, fm_freq);    
     #endif
     
     writeCurrrentSettingsToFlash = 0;
@@ -733,7 +768,7 @@ void process_buttons(uint8_t buttons)
       {
         if (buttons & BUTTON_SELECT)
         {
-          Dab.begin(1, DABPRO);
+          Dab.begin(1);
           Dab.tune(fm_freq);
 #ifdef USE_EEPROM
           writeCurrrentSettingsToFlash = true;
@@ -788,7 +823,7 @@ void process_buttons(uint8_t buttons)
       {
         if (buttons & BUTTON_SELECT)
         {
-          Dab.begin(0, DABPRO);
+          Dab.begin(0);
           if (NumOfEnsembles > 0)
           {
             lcd.clear();

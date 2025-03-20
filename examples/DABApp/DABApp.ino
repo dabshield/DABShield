@@ -15,6 +15,11 @@
 // v1.2 01/11/2021 - Added DAB Service Type, Dab/Dab+
 // v2.0 27/02/2025 - Added Support for DAB Shield Pro
 ///////////////////////////////////////////////////////////
+
+/*********  DAB SHIELD V3.0 **********/
+// Setup up Speaker output.
+#define SPEAKER_OUTPUT  SPEAKER_DIFF   //SPEAKER_NONE, SPEAKER_DIFF, SPEAKER_STEREO
+
 #include <SPI.h>
 #include <DABShield.h>
 
@@ -61,7 +66,6 @@ const char *const audiomode[] PROGMEM = {mode_0,mode_1,mode_2,mode_3};
 
 //#define DAB_SPI_BITBANG
 //#define ANALOG_VOLUME
-#define DABPRO true
 
 #ifdef ARDUINO_ARCH_SAMD
 #define Serial SerialUSB
@@ -129,7 +133,8 @@ void setup() {
   
   //DAB Setup
   Dab.setCallback(ServiceData);
-  Dab.begin(0, DABPRO);
+  Dab.speaker(SPEAKER_OUTPUT);
+  Dab.begin(0);
 
   if(Dab.error != 0)
   {
@@ -257,11 +262,13 @@ void Help_Menu(void)
   Serial.print(F("mute <on/off/left/right> - mutes/unmutes audio\n"));
   Serial.print(F("status                   - displays audio/reception info\n"));
   Serial.print(F("help                     - displays this menu\n"));
-  Serial.print(F("PRO:\n"));
-  Serial.print(F("spekaer <on/off/stereo>  - enable/disable/dual speaker config"));
+  if(Dab.Pro == true)
+  {
+    Serial.print(F("spekaer <on/off/stereo>  - enable/disable/dual speaker config\n"));
   Serial.print(F("bass <n>                 - set bass -12..0..12\n"));
   Serial.print(F("mid <n>                  - set mid -12..0..12\n"));
   Serial.print(F("treble <n>               - set treble -12..0..12\n"));
+  }
   Serial.print(F("________________________________________________________\n\n"));
 }
 
@@ -348,14 +355,14 @@ void process_command(char *command)
   }
   else if (strcmp(cmd, "fm") == 0)
   {
-    Dab.begin(1, DABPRO);
+    Dab.begin(1);
     dabmode = false;
     Dab.tune((uint16_t)8750);
     Help_Menu();
   }  
   else if (strcmp(cmd, "dab") == 0)
   {
-    Dab.begin(0, DABPRO);
+    Dab.begin(0);
     dabmode = true;
     Help_Menu();
   }  
@@ -372,15 +379,15 @@ void process_command(char *command)
     cmd = strtok(NULL, " \r");
     if(strcmp(cmd, "off") == 0)
     {
-      Dab.speaker(0);  
+      Dab.speaker(SPEAKER_NONE);  
     }
     else if(strcmp(cmd, "on") == 0)
     {
-      Dab.speaker(2);  
+      Dab.speaker(SPEAKER_DIFF);  
     }
     if(strcmp(cmd, "stereo") == 0)
     {
-      Dab.speaker(1);  
+      Dab.speaker(SPEAKER_STEREO);  
     }
   }
   else if (strcmp(cmd, "mute") == 0)
@@ -526,19 +533,19 @@ void DAB_scan(void)
 
 void DAB_status(void)
 {
-  char dabstring[32];
+  char dabstring[64];
   Dab.status();
   Serial.print(Dab.service[service].Label);
   Serial.print(F("\n"));
-  sprintf_P(dabstring,PSTR("PTY = %s (%d)\n"), pgm_read_word(&pty[Dab.pty]), Dab.pty);
-  Serial.print(dabstring); 
+  //sprintf_P(dabstring,PSTR("PTY = %S (%d)\n"), pgm_read_word(&pty[Dab.pty]), Dab.pty);
+  //Serial.print(dabstring); 
 
   sprintf(dabstring,"Bit Rate = %d kHz, ", Dab.bitrate);
   Serial.print(dabstring);
   sprintf(dabstring,"Sample Rate = %d Hz, ", Dab.samplerate);
   Serial.print(dabstring); 
-  sprintf_P(dabstring,PSTR("Audio Mode = %s (%d)\n"), pgm_read_word(&audiomode[Dab.mode]), Dab.mode);
-  Serial.print(dabstring); 
+  //sprintf_P(dabstring,PSTR("Audio Mode = %S (%d)\n"), pgm_read_word(&audiomode[Dab.mode]), Dab.mode);
+  //Serial.print(dabstring); 
 
   sprintf_P(dabstring, PSTR("Serivce Mode = %s\n"), Dab.dabplus == true ? PSTR("dab+") : PSTR("dab"));
   Serial.print(dabstring);

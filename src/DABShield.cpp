@@ -21,6 +21,7 @@
 // v1.5.2 18/10/2022 - Added EnsembleID and Extended Country Code 
 // v1.5.3 02/05/2023 - Added Pin Assignemnts via begin command
 // v2.0.0 27/02/2025 - Added Support for DAB Shield Pro
+// v2.0.2 20/03/2025 - Added Auto detect of DAB Shield Pro
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
@@ -142,6 +143,8 @@ DAB::DAB()
 	LibMinor = LIBMINOR;
 	bitrate = 0;
 	samplerate = 0;
+	Pro = false;
+	speakeroutput = SPEAKER_NONE;
 }
 
 void DAB::task(void)
@@ -204,17 +207,11 @@ void DAB::begin(uint8_t band, byte _interruptPin, byte _DABResetPin, byte _PwrEn
 
 void DAB::begin(uint8_t band)
 {
-	begin(band, false);
-}
-
-void DAB::begin(uint8_t band, bool pro)
-{
 	pinMode(DABResetPin, OUTPUT);
 	pinMode(PwrEn,OUTPUT);
 	pinMode(interruptPin, INPUT_PULLUP);
 
 	freq_index = -1;
-	Pro = pro;
 
 	si468x_reset();
 	if(band == 0)
@@ -232,6 +229,21 @@ void DAB::begin(uint8_t band, bool pro)
 		dab = false;
 	}
 
+	//Detect the "Pro" (DABShield v3.0)
+	Wire.begin();
+	Wire.beginTransmission(0x1A);
+	int rc = Wire.endTransmission();
+	if (rc == 0)
+	{
+		Pro = true;
+	}
+	else
+    {
+        Wire.end();
+    }
+	Serial.print("rc =");
+	Serial.println(rc);
+
 	if (Pro)
 	{
 		//Set up Digital Audio Slave
@@ -239,8 +251,6 @@ void DAB::begin(uint8_t band, bool pro)
 		si468x_set_property(0x0201, 48000);  // I2S sample rate
 		si468x_set_property(0x0800, 0x0002); // Digital Output Enable
 
-		//Initialise I2C
-		Wire.begin();
 		//Initialise the Codec
 		//Master Mode...
 		NAU8822WriteReg(NAU8822_REG_CLOCKING, 0x009);
@@ -250,29 +260,35 @@ void DAB::begin(uint8_t band, bool pro)
 		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_2, 0x180);
 		//DAC
 		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x00F);
+		//Speaker Output
+		speaker(speakeroutput);
 	}
 	error = command_error;
 }
 
-void DAB::speaker(uint8_t value)
+void DAB::speaker(DABSpeaker value)
 {
 	//Speaker Output...
-	switch (value)
+	speakeroutput = value;
+	if (Pro)
 	{
-	case 0: //Disable
-		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x00F);
-		NAU8822WriteReg(NAU8822_REG_RIGHT_SPEAKER_CONTROL, 0x000);
-		break;
+		switch (value)
+		{
+		case SPEAKER_NONE: //Disable
+			NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x00F);
+			NAU8822WriteReg(NAU8822_REG_RIGHT_SPEAKER_CONTROL, 0x000);
+			break;
 
-	case 1: //Stereo
-		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x06F);
-		NAU8822WriteReg(NAU8822_REG_RIGHT_SPEAKER_CONTROL, 0x000);
-		break; 
+		case SPEAKER_DIFF: //Differential
+			NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x06F);
+			NAU8822WriteReg(NAU8822_REG_RIGHT_SPEAKER_CONTROL, 0x010);
+			break;
 
-	case 2: //Differential
-		NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x06F);
-		NAU8822WriteReg(NAU8822_REG_RIGHT_SPEAKER_CONTROL, 0x010);
-		break;
+		case SPEAKER_STEREO: //Stereo
+			NAU8822WriteReg(NAU8822_REG_POWER_MANAGEMENT_3, 0x06F);
+			NAU8822WriteReg(NAU8822_REG_RIGHT_SPEAKER_CONTROL, 0x000);
+			break;
+		}
 	}
 }
 
