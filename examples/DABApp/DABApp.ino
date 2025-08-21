@@ -547,7 +547,7 @@ void DAB_status(void)
   //sprintf_P(dabstring,PSTR("Audio Mode = %S (%d)\n"), pgm_read_word(&audiomode[Dab.mode]), Dab.mode);
   //Serial.print(dabstring); 
 
-  sprintf_P(dabstring, PSTR("Serivce Mode = %s\n"), Dab.dabplus == true ? PSTR("dab+") : PSTR("dab"));
+  sprintf_P(dabstring, PSTR("Service Mode = %s\n"), Dab.dabplus == true ? PSTR("dab+") : PSTR("dab"));
   Serial.print(dabstring);
   
   sprintf(dabstring,"RSSI = %d, SNR = %d, Quality = %d%, ", Dab.signalstrength, Dab.snr, Dab.quality);

@@ -22,11 +22,13 @@
 // v1.5.3 02/05/2023 - Added Pin Assignemnts via begin command
 // v2.0.0 27/02/2025 - Added Support for DAB Shield Pro
 // v2.0.2 20/03/2025 - Added Auto detect of DAB Shield Pro
+// v2.0.3 21/08/2025 - Added Local time offset / fix mono-stereo for Pro / clear pi/pty on tune (fm)
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
 #include "Wire.h"
 #include "nau8822.h"
+#include <time.h>
 
 #define LIBMAJOR	2
 #define LIBMINOR	0
@@ -134,7 +136,6 @@ void NAU8822WriteReg(uint8_t reg, uint16_t data)
 	Wire.beginTransmission(0x1A);
 	Wire.write(i2cdata, 2);
 	Wire.endTransmission();
-	//Serial.print("I2C Write %x %x\n", i2cdata[0], i2cdata[1]);
 }
 
 DAB::DAB()
@@ -241,8 +242,6 @@ void DAB::begin(uint8_t band)
     {
         Wire.end();
     }
-	Serial.print("rc =");
-	Serial.println(rc);
 
 	if (Pro)
 	{
@@ -346,7 +345,8 @@ void DAB::tune(uint16_t freq_kHz)
 {
 	si468x_fm_tune_freq(freq_kHz);
 	si468x_fm_rsq_status();
-
+	pi = 0;
+ 	pty = 0;	
 	uint8_t i;
 	for(i=0; i<9; i++) {ps[i] = 0;}
 	for(i=0; i<DAB_MAX_SERVICEDATA_LEN; i++) {ServiceData[i] = 0;}
@@ -357,6 +357,8 @@ bool DAB::seek(uint8_t dir, uint8_t wrap)
 {
 	si468x_fm_seek(dir, wrap);
 	si468x_fm_rsq_status();
+	pi = 0;
+ 	pty = 0;	
 	uint8_t i;
 	for(i=0; i<9; i++) {ps[i] = 0;}
 	for(i=0; i<DAB_MAX_SERVICEDATA_LEN; i++) {ServiceData[i] = 0;}
@@ -767,7 +769,21 @@ bool DAB::time(DABTime *time)
 
 void DAB::mono(bool enable)
 {
-	si468x_set_property(0x0302, enable ? 0x01 : 0x00);
+	if (Pro)
+	{
+		if(enable)
+		{
+			NAU8822WriteReg(NAU8822_REG_OUTPUT_CONTROL, 0x062);
+		}
+		else
+		{
+			NAU8822WriteReg(NAU8822_REG_OUTPUT_CONTROL, 0x002);
+		}
+	}
+	else
+	{
+		si468x_set_property(0x0302, enable ? 0x01 : 0x00);
+	}
 }
 
 void DAB::mute(bool left, bool right)
@@ -1692,7 +1708,26 @@ uint16_t DAB::decode_rds_group(uint16_t blockA, uint16_t blockB, uint16_t blockC
 		Hours = ((blockD >> 12) & 0x0f);
 		Hours += ((blockC << 4) & 0x0010);
 		Minutes = ((blockD >> 6) & 0x3f);
-		//LocalOffset = (blockD & 0x3f);
+
+		int LocalOffset_minutes = (blockD & 0x1f) * 30;
+		LocalOffset_minutes *= (blockD & 0x20) ? -1 : 1;
+
+		//let <time.h> do the math
+		struct tm timeinfo = { 0 };
+		timeinfo.tm_year = Year - 1900;
+		timeinfo.tm_mon = Months;
+		timeinfo.tm_mday = Days;
+		timeinfo.tm_hour = Hours;
+		timeinfo.tm_min = Minutes + LocalOffset_minutes;
+		// Normalize the time structure
+		mktime(&timeinfo);
+
+		Year = timeinfo.tm_year + 1900;
+		Months = timeinfo.tm_mon;
+		Days = timeinfo.tm_mday;
+		Hours = timeinfo.tm_hour;
+		Minutes = timeinfo.tm_min;
+
 		ret |= 0x0010;
 	break;
 	}
