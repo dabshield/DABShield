@@ -481,18 +481,13 @@ void loop() {
       dueFlashStorage.write(FLASH_service, service);
       dueFlashStorage.write(FLASH_dab_mode, dab_mode);
       dueFlashStorage.write(FLASH_vol, vol);
-      dueFlashStorage.write(FLASH_fm_freq, (uint8_t *)&fm_freq, sizeof(fm_freq));  
+      dueFlashStorage.write(FLASH_fm_freq, (uint8_t *)&fm_freq, sizeof(fm_freq));        
   #elif ARDUINO_ARCH_SAMD
-      EEPROM.write(FLASH_ensemble, ensemble);
-      EEPROM.write(FLASH_service, service);
-      EEPROM.write(FLASH_dab_mode, dab_mode);
-      EEPROM.write(FLASH_vol, vol);
-      EEPROM.put(FLASH_fm_freq, fm_freq); 
-      if (!EEPROM.getCommitASAP())
-      {
-        Serial.println("CommitASAP not set. Need commit()");
-        EEPROM.commit();
-      }
+      LastPlayedEnsemble_storage.write(ensemble);
+      LastPlayedService_storage.write(service);
+      LastVolume_storage.write(vol);
+      DabMode_storage.write(dab_mode);
+      FMFreq_storage.write(fm_freq);
    #else
       EEPROM.write(FLASH_ensemble, ensemble);
       EEPROM.write(FLASH_service, service);
