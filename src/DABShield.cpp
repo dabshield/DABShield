@@ -23,6 +23,7 @@
 // v2.0.0 27/02/2025 - Added Support for DAB Shield Pro
 // v2.0.2 20/03/2025 - Added Auto detect of DAB Shield Pro
 // v2.0.3 21/08/2025 - Added Local time offset / fix mono-stereo for Pro / clear pi/pty on tune (fm)
+// v2.0.5 03/09/2025 - Fix for I2C First Transmission may be NCK'd of Wire already open (seen in WeMos M0)
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
@@ -234,14 +235,17 @@ void DAB::begin(uint8_t band)
 	Wire.begin();
 	Wire.beginTransmission(0x1A);
 	int rc = Wire.endTransmission();
+	//Retry if Wire is already open then first try may fail (seen on SAMD M0)
+	if(rc) 
+	{
+		Wire.beginTransmission(0x1A);
+		rc = Wire.endTransmission();
+	}
+
 	if (rc == 0)
 	{
 		Pro = true;
 	}
-	else
-    {
-        Wire.end();
-    }
 
 	if (Pro)
 	{
