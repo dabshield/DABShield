@@ -19,6 +19,9 @@
 // v1.5.3 02/05/2023 - Added Pin Assignemnts via begin command
 // v2.0.0 27/02/2025 - Added Support for DAB Shield Pro
 // v2.0.2 20/03/2025 - Added Auto detect of DAB Shield Pro
+// v2.0.3 21/08/2025 - Added Local time offset / fix mono-stereo for Pro / clear pi/pty on tune (fm)
+// v2.0.5 03/09/2025 - Fix for I2C First Transmission may be NCK'd of Wire already open (seen in WeMos M0)
+// v2.0.6 27/02/2027 - Added End Command
 ///////////////////////////////////////////////////////////
 #ifndef DABShield_h
 #define DABShield_h
@@ -90,6 +93,7 @@ class DAB {
     void begin(void);
 	void begin(uint8_t band);
 	void begin(uint8_t band, byte _interruptPin, byte _DABResetPin, byte _PwrEn);
+	void end(void);
     void tune(uint8_t freq_index);
 	void tuneservice(uint8_t freq, uint32_t serviceID, uint32_t CompID);
 	void tune(uint16_t freq_kHz);

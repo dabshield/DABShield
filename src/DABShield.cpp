@@ -24,6 +24,7 @@
 // v2.0.2 20/03/2025 - Added Auto detect of DAB Shield Pro
 // v2.0.3 21/08/2025 - Added Local time offset / fix mono-stereo for Pro / clear pi/pty on tune (fm)
 // v2.0.5 03/09/2025 - Fix for I2C First Transmission may be NCK'd of Wire already open (seen in WeMos M0)
+// v2.0.6 27/02/2027 - Added End Command
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
@@ -91,6 +92,7 @@ byte PwrEn = 6;
 unsigned char spiBuf[SPI_BUFF_SIZE + 8];
 uint8_t command_error;
 
+static void si468x_end(void);
 static void si468x_reset(void);
 static void si468x_init_dab(void);
 static void si468x_cts(void);
@@ -269,6 +271,11 @@ void DAB::begin(uint8_t band)
 	error = command_error;
 }
 
+void DAB::end(void)
+{
+	si468x_end();
+}
+
 void DAB::speaker(DABSpeaker value)
 {
 	//Speaker Output...
@@ -398,6 +405,7 @@ bool DAB::status(uint32_t ServiceID, uint32_t CompID)
 		get_subchan_info(ServiceID, CompID);
 		return true;
 	}
+	return false;
 }
 
 void DAB::set_service(uint8_t index)
@@ -619,6 +627,10 @@ void DAB::get_subchan_info(uint32_t serviceID, uint32_t compID)
 	}
 }
 
+static void si468x_end(void)
+{
+	digitalWrite(PwrEn, LOW);
+}
 
 static void si468x_reset(void)
 {
@@ -1487,11 +1499,18 @@ void DAB::parse_service_data(void)
 			{
 				byte_count = DAB_MAX_SERVICEDATA_LEN;
 			}
-			for (j = 0; j < (byte_count - 2 - 1); j++)
+			if(byte_count > 3)
 			{
-				ServiceData[j] = (char)spiBuf[27 + j];
+				for (j = 0; j < (byte_count - 2 - 1); j++)
+				{
+					ServiceData[j] = (char)spiBuf[27 + j];
+				}
+				ServiceData[j] = '\0';
 			}
-			ServiceData[j] = '\0';
+			else
+			{
+				strcpy(ServiceData, "ByteCount Exception!");
+			}		
 		}
 	}
 	else
