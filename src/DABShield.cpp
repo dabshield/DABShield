@@ -24,7 +24,8 @@
 // v2.0.2 20/03/2025 - Added Auto detect of DAB Shield Pro
 // v2.0.3 21/08/2025 - Added Local time offset / fix mono-stereo for Pro / clear pi/pty on tune (fm)
 // v2.0.5 03/09/2025 - Fix for I2C First Transmission may be NCK'd of Wire already open (seen in WeMos M0)
-// v2.0.6 27/02/2027 - Added End Command
+// v2.0.6 27/02/2026 - Added End Command
+// v2.1.0 11/05/2026 - Added Slideshow
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
@@ -33,7 +34,7 @@
 #include <time.h>
 
 #define LIBMAJOR	2
-#define LIBMINOR	0
+#define LIBMINOR	1
 
 #define SI46XX_RD_REPLY 				0x00
 #define SI46XX_POWER_UP 				0x01
@@ -85,6 +86,8 @@ byte PwrEn = 6;
 
 #if defined (ARDUINO_AVR_UNO)
 #define SPI_BUFF_SIZE	(256)
+#elif defined (ARDUINO_ARCH_ESP32) 
+#define SPI_BUFF_SIZE	(2 * 1024)
 #else
 #define SPI_BUFF_SIZE	(512)
 #endif
@@ -419,6 +422,29 @@ void DAB::set_service(uint8_t index)
 bool DAB::servicevalid(void)
 {
 	return DAB_service_valid();
+}
+
+void DAB::slideshow(uint8_t *imagebuffer, uint32_t imagebuffersize, void (*Slideshow)(uint8_t *image, uint32_t size, ImageType type))
+{
+	_Slideshow = Slideshow;
+	DAB::imagebuffer = imagebuffer;
+	DAB::imagebuffersize = imagebuffersize;
+}
+
+void DAB::digitalouput(bool enable)
+{
+	if (!Pro)
+	{
+		if (enable)
+		{
+			si468x_set_property(0x0200, 0x8000); // I2S Master mode
+			si468x_set_property(0x0800, 0x0002); // Digital Output Enable	
+		}
+		else
+		{	
+			si468x_set_property(0x0800, 0x0001); // Digital Output Enable
+		}
+	}
 }
 
 void DAB::vol(uint8_t vol)
@@ -1473,14 +1499,127 @@ void DAB::parse_service_data(void)
 
 	(void)buff_count;
 	(void)srv_state;
-	(void)DSCty;
 	(void)service_id;
 	(void)comp_id;
 	(void)rfu;
 	(void)seg_num;
 	(void)num_segs;
+	
+	// Slideshow
+	static uint32_t imageSize = 0;
+	static uint16_t currentTransportID = 0;
+	static uint32_t expectedImageSize = 0;
+	static uint16_t contentSubType = 0;
+	static uint16_t contentType = 0;
 
-	if (data_src == 0x02) //DLS/DL+ over PAD for DLS services
+
+	if (data_src == 0x01 && DSCty == 60) { // MOT
+
+		uint16_t transportID = 0;
+		uint8_t dataGroupStartIndex = 25;		
+		uint8_t dataGroupType = spiBuf[dataGroupStartIndex] & 0xf;
+		uint16_t segmentNum = ((0xFF & spiBuf[dataGroupStartIndex + 2]) << 8 | (0xFF & spiBuf[dataGroupStartIndex + 3])) & 0x7fff;
+		bool last = ((((0xFF & spiBuf[dataGroupStartIndex + 2]) << 8) | ((0xFF & spiBuf[dataGroupStartIndex + 3]) & 0x8000)) > 0) ? (true) : (false);
+		uint16_t segmentSize = ((0xFF & spiBuf[dataGroupStartIndex + 7]) << 8 | (0xFF & spiBuf[dataGroupStartIndex + 8])) & 0x1fff;
+		bool transportIDFlag = ((spiBuf[dataGroupStartIndex + 4] & 0x10) > 0) ? (true) : (false);
+		if (transportIDFlag) {
+			transportID = (0xFF & spiBuf[dataGroupStartIndex + 5]) << 8 | (0xFF & spiBuf[dataGroupStartIndex + 6]);
+		} else {
+			transportID = 0;
+		}
+		
+		//Serial.print("segmentNum:");
+		//Serial.print(segmentNum);
+		//Serial.print(" dataGroupType:");
+		//Serial.println(dataGroupType);
+		
+		if (dataGroupType == 3) { // MOT Header
+			
+			uint64_t headerCore = ((uint64_t)spiBuf[dataGroupStartIndex+9] << 48) |
+								((uint64_t)spiBuf[dataGroupStartIndex+10] << 40) |
+								((uint64_t)spiBuf[dataGroupStartIndex+11] << 32) |
+								((uint64_t)spiBuf[dataGroupStartIndex+12] << 24) |
+								((uint64_t)spiBuf[dataGroupStartIndex+13] << 16) |
+								((uint64_t)spiBuf[dataGroupStartIndex+14] << 8) |
+								spiBuf[dataGroupStartIndex+15];
+			// Extract fields
+			contentSubType = headerCore & 0x1FF;
+			contentType = (headerCore >> 9) & 0x3F;
+			uint16_t headerSize = (headerCore >> 15) & 0x1FFF;
+			uint32_t bodySize = (headerCore >> 28) & 0xFFFFFFF;
+			
+			if (contentType == 2 && ((contentSubType == 1) || (contentSubType == 3)) ) {
+				// JPEG or PNG
+				// if expectedImageSize > 0 then we start to collect image data
+				expectedImageSize = bodySize;
+				currentTransportID = transportID;
+				if(imagebuffer && imagebuffersize)
+				{
+					memset(imagebuffer, 0, imagebuffersize);	
+				}
+			}
+			
+			//Serial.print("Content Type: ");
+			//Serial.println(contentType);			
+			//Serial.print("Content SubType: ");
+			//Serial.println(contentSubType);
+
+			//Serial.print("Header Size: ");
+			//Serial.println(headerSize);
+			//Serial.print("Body Size: ");
+			//Serial.println(bodySize);
+			//Serial.print("transportID: ");
+			//Serial.println(transportID);
+			
+		} else if (dataGroupType == 4) { // MOT Body
+		
+			if (currentTransportID != transportID) {
+				expectedImageSize = 0;
+			}
+
+			if (expectedImageSize > 0) {
+			
+				if (segmentNum == 0){
+					imageSize = 0;
+				}
+				if(imagebuffer && ((imageSize + segmentSize) < imagebuffersize))
+				{
+					memcpy(&imagebuffer[imageSize], &spiBuf[dataGroupStartIndex+9], segmentSize);
+				}
+				imageSize += segmentSize;
+	
+				if (last && expectedImageSize == imageSize) { // Send to screen
+					expectedImageSize = 0;
+					
+					//Serial.print("\n\n  **Image Size: ");
+					//Serial.println(imageSize);
+					
+					if(contentSubType == 0x01)
+					{
+						// JPEG
+						if ((imagebuffer[0] == 0xFF) && (imagebuffer[1] == 0xD8)) 
+						{
+							//JPEG Image Data available here...
+							if(_Slideshow)
+							{
+								_Slideshow(imagebuffer, imageSize, JPEG);
+							}
+						}
+					}
+					else if(contentSubType == 0x03)
+					{
+						//PNG
+						if(_Slideshow)
+						{
+							_Slideshow(imagebuffer, imageSize, PNG);
+						}
+					}
+				}
+			}
+		}
+
+	} 
+	else if (data_src == 0x02) //DLS/DL+ over PAD for DLS services
 	{
 		uint8_t header1;
 		uint8_t header2;

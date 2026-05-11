@@ -21,7 +21,8 @@
 // v2.0.2 20/03/2025 - Added Auto detect of DAB Shield Pro
 // v2.0.3 21/08/2025 - Added Local time offset / fix mono-stereo for Pro / clear pi/pty on tune (fm)
 // v2.0.5 03/09/2025 - Fix for I2C First Transmission may be NCK'd of Wire already open (seen in WeMos M0)
-// v2.0.6 27/02/2027 - Added End Command
+// v2.0.6 27/02/2026 - Added End Command
+// v2.1.0 11/05/2026 - Added Slideshow
 ///////////////////////////////////////////////////////////
 #ifndef DABShield_h
 #define DABShield_h
@@ -32,7 +33,6 @@ const PROGMEM uint32_t dab_freq[] = {174928, 176640, 178352, 180064, 181936, 183
                                      202928, 204640, 206352, 208064, 209936, 211648, 213360, 215072, 216928, 218640, 220352, 222064, 223936, 225648, 227360, 229072,
                                      230784, 232496, 234208, 235776, 237488, 239200
                                     };
-
 #define DAB_FREQS (sizeof(dab_freq) / sizeof(dab_freq[0]))
 
 #if defined (ARDUINO_AVR_UNO)
@@ -64,6 +64,14 @@ typedef enum _AudioMode
 	STEREO,
 	JOINT_STEREO
 } AudioMode;
+
+typedef enum _ImageType
+{
+	GIF = 0,
+	JPEG,
+	BMP,
+	PNG
+} ImageType;
 
 typedef struct _Services
 {
@@ -107,12 +115,14 @@ class DAB {
 	void bass(int8_t level);
 	void mid(int8_t level);
 	void treble(int8_t level);
+	void digitalouput(bool enable);
 
     void set_service(uint8_t index);
 	bool servicevalid(void);
     void vol(uint8_t vol);
     void servicedata(void);
     uint32_t freq_khz(uint8_t index);
+	void slideshow(uint8_t *imagebuffer, uint32_t imagebuffersize, void (*Slideshow)(uint8_t *image, uint32_t size, ImageType type));
 	
 	uint16_t ECC;
 	uint32_t EnsembleID;
@@ -158,8 +168,12 @@ class DAB {
 	uint8_t		Hours;
 	uint8_t		Minutes;
 
+	uint8_t		*imagebuffer;
+	uint32_t	imagebuffersize;
+
   private:
     void (*_Callback)(void);
+	void (*_Slideshow)(uint8_t *image, uint32_t size, ImageType type);
     void DataService(void);
     void get_ensemble_info(void);
 	void get_audio_info(void);
