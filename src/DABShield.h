@@ -67,10 +67,10 @@ typedef enum _AudioMode
 
 typedef enum _ImageType
 {
-	GIF = 0,
-	JPEG,
-	BMP,
-	PNG
+	DAB_GIF = 0,
+	DAB_JPEG,
+	DAB_BMP,
+	DAB_PNG
 } ImageType;
 
 typedef struct _Services

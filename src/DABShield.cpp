@@ -187,7 +187,6 @@ void DAB::DataService(void)
 			si468x_responseN(SPI_BUFF_SIZE - 1);
 		}
 		parse_service_data();
-		_Callback();
 	}
 	//RDSINT
 	if ((status0 & 0x04) == 0x04)
@@ -1602,7 +1601,7 @@ void DAB::parse_service_data(void)
 							//JPEG Image Data available here...
 							if(_Slideshow)
 							{
-								_Slideshow(imagebuffer, imageSize, JPEG);
+								_Slideshow(imagebuffer, imageSize, DAB_JPEG);
 							}
 						}
 					}
@@ -1611,7 +1610,7 @@ void DAB::parse_service_data(void)
 						//PNG
 						if(_Slideshow)
 						{
-							_Slideshow(imagebuffer, imageSize, PNG);
+							_Slideshow(imagebuffer, imageSize, DAB_PNG);
 						}
 					}
 				}
@@ -1645,6 +1644,10 @@ void DAB::parse_service_data(void)
 					ServiceData[j] = (char)spiBuf[27 + j];
 				}
 				ServiceData[j] = '\0';
+				if(_Callback)
+				{
+					_Callback();
+				}
 			}
 			else
 			{
