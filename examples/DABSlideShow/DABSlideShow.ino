@@ -188,7 +188,7 @@ unsigned char imageData[MAX_IMAGE_SIZE];
 void DisplaySlideShow(uint8_t *image, uint32_t size, ImageType type);
 
 void *UIProcess(void *p) {
-  Serial.println("UIProcess Thread");
+  //Serial.println("UIProcess Thread");
   while (1) {
     UIloop();
     vTaskDelay(1);
@@ -248,7 +248,7 @@ void setup() {
 
   esp_pthread_cfg_t cfg = esp_pthread_get_default_config();
   cfg.stack_size = (16 * 1024);
-  Serial.printf("UIProcess priority = %d\n", cfg.prio);
+  //Serial.printf("UIProcess priority = %d\n", cfg.prio);
   cfg.prio += 2;
   esp_pthread_set_cfg(&cfg);
   pthread_create(&UIThread, NULL, UIProcess, (void *)NULL);
@@ -276,7 +276,7 @@ void Display_DAB_Screen(void) {
   display_screen = DISPLAY_SCREEN_DAB;
   tft.fillScreen(COLOR_BACKGROUND);
   //tft.fillRect(20, 20, 160, 120, COLOR_RGB565_BLACK);
-  DisplaySlideShow((uint8_t *)DABShieldJPG, sizeof(DABShieldJPG), JPEG);
+  DisplaySlideShow((uint8_t *)DABShieldJPG, sizeof(DABShieldJPG), DAB_JPEG);
 
   tft.fillRect(0, 230, 480, 100, COLOR_RGB565_WHITE);
   tft.pushImage(/*x=*/0, /*y=*/226, /*w=*/480, /*h=*/8, /*bitmap gImage_Bitmap=*/(const uint16_t *)bar);
@@ -413,13 +413,15 @@ void DABFileWrite() {
   serializeJson(doc, myfile);
   myfile.close();
 
+#if 0 //output the json file to the Serial Monitor
   myfile = SPIFFS.open("/DAB.json", "r");
   while (myfile.available()) {
     Serial.write(myfile.read());
-    Serial.println("");
     vTaskDelay(1);
   }
+  Serial.println("");
   myfile.close();
+#endif  
 
 }
 
@@ -585,7 +587,7 @@ void timer1ms(void) {
       seek_timer--;
       if (seek_timer == 0) {
         Dab.tuneservice(Ensemble[ensemble].freq_index, Ensemble[ensemble].service[service].ServiceID, Ensemble[ensemble].service[service].CompID);
-        DisplaySlideShow((uint8_t *)DABShieldJPG, sizeof(DABShieldJPG), JPEG);
+        DisplaySlideShow((uint8_t *)DABShieldJPG, sizeof(DABShieldJPG), DAB_JPEG);
         save_settings_timer = 10000;
       }
     }
@@ -742,7 +744,7 @@ bool tft_render(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
 
 void DisplaySlideShow(uint8_t *image, uint32_t size, ImageType type)
 {				
-  if(type == JPEG)
+  if(type == DAB_JPEG)
   {
     // The jpeg image can be scaled by a factor of 1, 2, 4, or 8
     TJpgDec.setJpgScale(2);
@@ -753,12 +755,12 @@ void DisplaySlideShow(uint8_t *image, uint32_t size, ImageType type)
     // Get the width and height in pixels of the jpeg if you wish
     uint16_t w = 0, h = 0;
     TJpgDec.getJpgSize(&w, &h, image, size);
-    Serial.print("Width = "); Serial.print(w); Serial.print(", height = "); Serial.println(h);
+    //Serial.print("Width = "); Serial.print(w); Serial.print(", height = "); Serial.println(h);
 
     // Draw the image, top left at 20, 20
     TJpgDec.drawJpg(20, 20, image, size);
   }
-  else if(type == PNG)
+  else if(type == DAB_PNG)
   {  
     Serial.println("PNG IMAGE - TODO");
   }

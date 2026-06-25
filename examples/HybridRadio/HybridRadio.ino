@@ -466,12 +466,15 @@ void DABFileWrite() {
   serializeJson(doc, myfile);
   myfile.close();
 
+#if 0 //output the json file to the Serial Monitor
   myfile = SPIFFS.open("/DAB.json", "r");
   while (myfile.available()) {
     Serial.write(myfile.read());
     vTaskDelay(1);
   }
+  Serial.println("");
   myfile.close();
+#endif  
 
 }
 

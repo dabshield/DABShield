@@ -26,6 +26,7 @@
 // v2.0.5 03/09/2025 - Fix for I2C First Transmission may be NCK'd of Wire already open (seen in WeMos M0)
 // v2.0.6 27/02/2026 - Added End Command
 // v2.1.0 11/05/2026 - Added Slideshow
+// v2.1.3 25/06/2026 - Reduced the Polling rate
 ///////////////////////////////////////////////////////////
 #include "DABShield.h"
 #include "Si468xROM.h"
@@ -156,9 +157,12 @@ DAB::DAB()
 
 void DAB::task(void)
 {
-	//if(digitalRead(interruptPin) == LOW)
+	static uint32_t previous = 0;
+	uint32_t current = millis();
+  	if ((digitalRead(interruptPin) == LOW) || ((current - previous) > 46))
 	{
 		DataService();
+	    previous = current;
 	}
 }
 
