@@ -46,8 +46,10 @@ void RadioDNSsetup(const char *ssid, const char *password) {
 }
 
 const char amptext[] = "&amp;";
-char imageurl[128];
-char mime[32];
+#define RADIO_DNS_IMAGE_URL_SIZE 128
+#define RADIO_DNS_MIME_SIZE 32
+char imageurl[RADIO_DNS_IMAGE_URL_SIZE];
+char mime[RADIO_DNS_MIME_SIZE];
 
 uint16_t GetDABLogo(uint16_t ServiceID, uint16_t EnsembleID, uint16_t ECC) {
   char radioDNS[128];
@@ -93,7 +95,7 @@ uint16_t GetLogo(char *service, char *bearer, uint32_t id) {
   }
   sched_yield();
 
-  if (ParseXMLImageURL(imageurl, mime, servicexml) == 0) {
+  if (ParseXMLImageURL(imageurl, sizeof(imageurl), mime, sizeof(mime), servicexml) == 0) {
     free(servicexml);
     return 0;
   }
@@ -108,8 +110,7 @@ uint16_t GetLogo(char *service, char *bearer, uint32_t id) {
     if (!ext || ext == imageurl)
       return 0;
 
-    if (strcmp(ext, ".png") || strcmp(ext, ".jpg")) {
-      ext[4] = '\0';
+    if (strcmp(ext, ".png") == 0 || strcmp(ext, ".jpg") == 0) {
       sprintf(filename, "/%04x%s", id, ext);
       Serial.printf("filename = %s\n", filename);
 
@@ -548,40 +549,63 @@ bool FindOurService(const char *text, const char *bearer) {
   return false;
 }
 
-int ParseXMLImageURL(char *url, char *mime, const char *xml) {
+static int ParseXMLImageURL(char *url, size_t urlSize, char *mime, size_t mimeSize, const char *xml) {
   using namespace tinyxml2;
+  if (!url || !urlSize || !mime || !mimeSize || !xml) {
+    Serial.println("Invalid image URL parser arguments");
+    return 0;
+  }
+  url[0] = '\0';
+  mime[0] = '\0';
+
   XMLDocument xmlDocument;
   if (xmlDocument.Parse(xml) != tinyxml2::XML_SUCCESS) {
     Serial.println("Error parsing");
     return 0;
   }
 
-  XMLNode *service = xmlDocument.FirstChild();
-  XMLElement *mediaDescription = service->FirstChildElement("mediaDescription");
-  bool found = true;
-  while (found) {
-    if (mediaDescription) {
-      XMLElement *multimedia = mediaDescription->FirstChildElement("multimedia");
-      if (multimedia) {
-        int height;
-        int width;
-        multimedia->QueryAttribute("height", &height);
-        multimedia->QueryAttribute("width", &width);
-        if ((height == 128) && (width == 128)) {
-          url[0] = '\0';
-          mime[0] = '\0';
-          if (multimedia->Attribute("url"))
-            strcpy(url, multimedia->Attribute("url"));
-          if (multimedia->Attribute("mimeValue"))
-            strcpy(mime, multimedia->Attribute("mimeValue"));
-          Serial.printf("Found (%dx%d), %s type:%s\n", height, width, url, mime);
-          return 1;
-        }
-      }
-      mediaDescription = mediaDescription->NextSiblingElement("mediaDescription");
-    } else {
-      found = false;
-    }
+  XMLElement *service = xmlDocument.RootElement();
+  if (!service) {
+    Serial.println("Service XML is empty");
+    return 0;
   }
+  for (XMLElement *mediaDescription = service->FirstChildElement("mediaDescription");
+       mediaDescription;
+       mediaDescription = mediaDescription->NextSiblingElement("mediaDescription")) {
+    XMLElement *multimedia = mediaDescription->FirstChildElement("multimedia");
+    if (!multimedia) {
+      continue;
+    }
+
+    int height = 0;
+    int width = 0;
+    if (multimedia->QueryAttribute("height", &height) != XML_SUCCESS ||
+        multimedia->QueryAttribute("width", &width) != XML_SUCCESS ||
+        height != 128 || width != 128) {
+      continue;
+    }
+
+    const char *urlAttribute = multimedia->Attribute("url");
+    const char *mimeAttribute = multimedia->Attribute("mimeValue");
+    if (!urlAttribute) {
+      Serial.println("Image URL is missing");
+      return 0;
+    }
+
+    size_t urlLength = strlen(urlAttribute);
+    size_t mimeLength = mimeAttribute ? strlen(mimeAttribute) : 0;
+    if (urlLength >= urlSize || mimeLength >= mimeSize) {
+      Serial.println("Image URL or MIME type exceeds buffer capacity");
+      return 0;
+    }
+
+    memcpy(url, urlAttribute, urlLength + 1);
+    if (mimeAttribute) {
+      memcpy(mime, mimeAttribute, mimeLength + 1);
+    }
+    Serial.printf("Found (%dx%d), %s type:%s\n", height, width, url, mime);
+    return 1;
+  }
+
   return 0;
 }

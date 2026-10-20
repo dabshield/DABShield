@@ -272,24 +272,59 @@ void Help_Menu(void)
   Serial.print(F("________________________________________________________\n\n"));
 }
 
+static void print_prompt(void)
+{
+  Serial.print(dabmode == true ? F("DAB>") : F("FM>"));
+}
+
 void process_command(char *command)
 {
   char *cmd;
   cmd = strtok(command, " \r");
+  if (cmd == NULL)
+  {
+    return;
+  }
+
+  char *arg = strtok(NULL, " \r");
+  bool requires_argument =
+    strcmp_P(cmd, PSTR("tune")) == 0 ||
+    strcmp_P(cmd, PSTR("service")) == 0 ||
+    strcmp_P(cmd, PSTR("volume")) == 0 ||
+    strcmp_P(cmd, PSTR("bass")) == 0 ||
+    strcmp_P(cmd, PSTR("mid")) == 0 ||
+    strcmp_P(cmd, PSTR("treble")) == 0 ||
+    strcmp(cmd, "speaker") == 0 ||
+    strcmp(cmd, "mute") == 0 ||
+    strcmp(cmd, "seek") == 0;
+  if (requires_argument && arg == NULL)
+  {
+    Serial.print(F("Missing command argument\n"));
+    print_prompt();
+    return;
+  }
 
   if (strcmp_P(cmd, PSTR("tune")) == 0)
   {
-    cmd = strtok(NULL, " \r");
     if(dabmode == true)
     {
-      freq = (int)strtol(cmd, NULL, 10);
-      service = 0;
-      Dab.tune(freq);
-      Ensemble_Info();
+      char *end;
+      long freq_index = strtol(arg, &end, 10);
+      if (*end == '\0' && freq_index >= 0 && freq_index < DAB_FREQS)
+      {
+        freq = (uint8_t)freq_index;
+        service = 0;
+        Dab.tune(freq);
+        Ensemble_Info();
+      }
+      else
+      {
+        Serial.print(F("DAB frequency index out of range\n"));
+      }
     }
     else
     {
-      uint32_t freqkhz = strtol(cmd, NULL, 10);
+      uint32_t freqkhz = strtol(arg, NULL, 10);
       if((freqkhz >= 87500) && (freqkhz <= 107900))
       {
         Dab.tune((uint16_t)(freqkhz/10));
@@ -308,34 +343,39 @@ void process_command(char *command)
   }
   else if (strcmp_P(cmd, PSTR("service")) == 0)
   {
-    cmd = strtok(NULL, " \r");
-    service = (uint8_t)strtol(cmd, NULL, 10);
-    Dab.set_service(service);
-    Serial.print(Dab.service[service].Label);
-    Serial.print(F("\n"));
+    char *end;
+    long service_index = strtol(arg, &end, 10);
+    if (*end == '\0' && service_index >= 0 &&
+        service_index < Dab.numberofservices && service_index < DAB_MAX_SERVICES)
+    {
+      service = (uint8_t)service_index;
+      Dab.set_service(service);
+      Serial.print(Dab.service[service].Label);
+      Serial.print(F("\n"));
+    }
+    else
+    {
+      Serial.print(F("Service index out of range\n"));
+    }
   }
   else if (strcmp_P(cmd, PSTR("volume")) == 0)
   {
-    cmd = strtok(NULL, " \r");
-    vol = (uint8_t)strtol(cmd, NULL, 10);
+    vol = (uint8_t)strtol(arg, NULL, 10);
     Dab.vol(vol);
   }
   else if (strcmp_P(cmd, PSTR("bass")) == 0)
   {
-    cmd = strtok(NULL, " \r");
-    int8_t level = (int8_t)strtol(cmd, NULL, 10);
+    int8_t level = (int8_t)strtol(arg, NULL, 10);
     Dab.bass(level);
   }
   else if (strcmp_P(cmd, PSTR("mid")) == 0)
   {
-    cmd = strtok(NULL, " \r");
-    int8_t level = (int8_t)strtol(cmd, NULL, 10);
+    int8_t level = (int8_t)strtol(arg, NULL, 10);
     Dab.mid(level);
   }
   else if (strcmp_P(cmd, PSTR("treble")) == 0)
   {
-    cmd = strtok(NULL, " \r");
-    int8_t level = (int8_t)strtol(cmd, NULL, 10);
+    int8_t level = (int8_t)strtol(arg, NULL, 10);
     Dab.treble(level);
   }
   else if (strcmp_P(cmd, PSTR("info")) == 0)
@@ -376,36 +416,34 @@ void process_command(char *command)
   }
   else if (strcmp(cmd, "speaker") == 0)
   {
-    cmd = strtok(NULL, " \r");
-    if(strcmp(cmd, "off") == 0)
+    if(strcmp(arg, "off") == 0)
     {
       Dab.speaker(SPEAKER_NONE);  
     }
-    else if(strcmp(cmd, "on") == 0)
+    else if(strcmp(arg, "on") == 0)
     {
       Dab.speaker(SPEAKER_DIFF);  
     }
-    if(strcmp(cmd, "stereo") == 0)
+    if(strcmp(arg, "stereo") == 0)
     {
       Dab.speaker(SPEAKER_STEREO);  
     }
   }
   else if (strcmp(cmd, "mute") == 0)
   {
-    cmd = strtok(NULL, " \r");
-    if(strcmp(cmd, "on") == 0)
+    if(strcmp(arg, "on") == 0)
     {
       Dab.mute(true, true);  
     }
-    else if(strcmp(cmd, "off") == 0)
+    else if(strcmp(arg, "off") == 0)
     {
       Dab.mute(false, false);  
     }    
-    else if(strcmp(cmd, "left") == 0)
+    else if(strcmp(arg, "left") == 0)
     {
       Dab.mute(true, false);  
     }    
-    else if(strcmp(cmd, "right") == 0)
+    else if(strcmp(arg, "right") == 0)
     {
       Dab.mute(false, true);  
     }    
@@ -413,12 +451,11 @@ void process_command(char *command)
   else if (strcmp(cmd, "seek") == 0)
   {
     bool valid = false;
-    cmd = strtok(NULL, " \r");
-    if(strcmp(cmd, "up") == 0)
+    if(strcmp(arg, "up") == 0)
     {
       valid = Dab.seek(1, 1);
     }
-    else if(strcmp(cmd, "down") == 0)
+    else if(strcmp(arg, "down") == 0)
     {
       valid = Dab.seek(0, 1);
     }
@@ -451,22 +488,11 @@ void process_command(char *command)
   {
     Help_Menu();
   }
-  else if (strlen(command) == 0)
-  {
-    //no command
-  }
   else
   {
     Serial.print(F("Unknown command\n"));
   }
-  if(dabmode == true)
-  {
-    Serial.print(F("DAB>"));
-  }
-  else
-  {
-    Serial.print(F("FM>"));
-  }
+  print_prompt();
 }
 
 void Ensemble_Info(void)

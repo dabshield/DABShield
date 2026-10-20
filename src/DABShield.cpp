@@ -37,6 +37,7 @@
 #define LIBMAJOR	2
 #define LIBMINOR	1
 
+// SI468x command codes
 #define SI46XX_RD_REPLY 				0x00
 #define SI46XX_POWER_UP 				0x01
 #define SI46XX_HOST_LOAD				0x04
@@ -69,7 +70,6 @@
 #define SI46XX_DAB_GET_ENSEMBLE_INFO                    0xB4
 #define SI46XX_DAB_GET_SERVICE_LINKING_INFO 	        0xB7
 #define SI46XX_DAB_SET_FREQ_LIST 			0xB8
-#define SI46XX_DAB_GET_ENSEMBLE_INFO 			0xB4
 #define SI46XX_GET_TIME						0xBC
 #define SI46XX_DAB_GET_AUDIO_INFO 			0xBD
 #define SI46XX_DAB_GET_SUBCHAN_INFO 			0xBE
@@ -96,6 +96,7 @@ byte PwrEn = 6;
 unsigned char spiBuf[SPI_BUFF_SIZE + 8];
 uint8_t command_error;
 
+// SI468x command helpers
 static void si468x_end(void);
 static void si468x_reset(void);
 static void si468x_init_dab(void);
@@ -126,7 +127,6 @@ static void si468x_dab_digrad_status(void);
 static void si468x_get_digital_service_data(void);
 static void si468x_dab_get_event_status(void);
 static void si468x_get_digital_service_list(void);
-static void si468x_get_digital_service_data(void);
 static void si468x_get_audio_info(void);
 static void si468x_get_service_info(uint32_t serviceID);
 static void si468x_get_subchan_info(uint32_t serviceID, uint32_t compID);
@@ -145,6 +145,7 @@ void NAU8822WriteReg(uint8_t reg, uint16_t data)
 	Wire.endTransmission();
 }
 
+// DAB public API
 DAB::DAB()
 {
 	LibMajor = LIBMAJOR;
@@ -153,6 +154,10 @@ DAB::DAB()
 	samplerate = 0;
 	Pro = false;
 	speakeroutput = SPEAKER_NONE;
+	imagebuffer = NULL;
+	imagebuffersize = 0;
+	_Callback = NULL;
+	_Slideshow = NULL;
 }
 
 void DAB::task(void)
@@ -196,7 +201,7 @@ void DAB::DataService(void)
 	if ((status0 & 0x04) == 0x04)
 	{
 		si468x_get_fm_rds_status();
-		if(rdsdata != 0)
+		if(rdsdata != 0 && _Callback)
 			_Callback();
 	}
 }
@@ -310,6 +315,12 @@ void DAB::speaker(DABSpeaker value)
 
 void DAB::tune(uint8_t freq)
 {
+	if (freq >= DAB_FREQS)
+	{
+		error = 0x80;
+		return;
+	}
+
 	numberofservices = 0;
 	freq_index = freq;
 	ServiceData[0] = '\0';
@@ -329,6 +340,12 @@ void DAB::tune(uint8_t freq)
 
 void DAB::tuneservice(uint8_t freq, uint32_t serviceID, uint32_t CompID)
 {
+	if (freq >= DAB_FREQS)
+	{
+		error = 0x80;
+		return;
+	}
+
 	uint32_t timeout;
 	numberofservices = 0;
 
@@ -492,9 +509,15 @@ void DAB::treble(int8_t level)
 
 uint32_t DAB::freq_khz(uint8_t index)
 {
+	if (index >= DAB_FREQS)
+	{
+		return 0;
+	}
+
 	return pgm_read_dword_near(dab_freq + index);
 }
 
+// DAB response parsing and status helpers
 static bool DAB_service_valid(void)
 {
 	si468x_dab_digrad_status();
@@ -661,6 +684,7 @@ static void si468x_end(void)
 	digitalWrite(PwrEn, LOW);
 }
 
+// SI468x initialization and command transport
 static void si468x_reset(void)
 {
 	digitalWrite(PwrEn, HIGH);
@@ -1228,6 +1252,7 @@ static void WriteSpiMssg(unsigned char *data, uint32_t len)
 	DABSpiMsg(data, len);
 }
 
+// DAB service-list and service-data parsing
 void DAB::parse_service_list(void)
 {
 	uint16_t i, j, offset;
@@ -1551,13 +1576,13 @@ void DAB::parse_service_data(void)
 			uint16_t headerSize = (headerCore >> 15) & 0x1FFF;
 			uint32_t bodySize = (headerCore >> 28) & 0xFFFFFFF;
 			
+			expectedImageSize = 0;
+			imageSize = 0;
 			if (contentType == 2 && ((contentSubType == 1) || (contentSubType == 3)) ) {
-				// JPEG or PNG
-				// if expectedImageSize > 0 then we start to collect image data
-				expectedImageSize = bodySize;
 				currentTransportID = transportID;
-				if(imagebuffer && imagebuffersize)
+				if (imagebuffer && imagebuffersize && bodySize <= imagebuffersize)
 				{
+					expectedImageSize = bodySize;
 					memset(imagebuffer, 0, imagebuffersize);	
 				}
 			}
@@ -1578,6 +1603,7 @@ void DAB::parse_service_data(void)
 		
 			if (currentTransportID != transportID) {
 				expectedImageSize = 0;
+				imageSize = 0;
 			}
 
 			if (expectedImageSize > 0) {
@@ -1585,37 +1611,37 @@ void DAB::parse_service_data(void)
 				if (segmentNum == 0){
 					imageSize = 0;
 				}
-				if(imagebuffer && ((imageSize + segmentSize) < imagebuffersize))
+				if (imageSize > expectedImageSize ||
+					segmentSize > expectedImageSize - imageSize ||
+					imageSize > imagebuffersize ||
+					segmentSize > imagebuffersize - imageSize)
+				{
+					expectedImageSize = 0;
+					imageSize = 0;
+				}
+				else
 				{
 					memcpy(&imagebuffer[imageSize], &spiBuf[dataGroupStartIndex+9], segmentSize);
-				}
-				imageSize += segmentSize;
+					imageSize += segmentSize;
 	
-				if (last && expectedImageSize == imageSize) { // Send to screen
-					expectedImageSize = 0;
-					
-					//Serial.print("\n\n  **Image Size: ");
-					//Serial.println(imageSize);
-					
-					if(contentSubType == 0x01)
-					{
-						// JPEG
-						if ((imagebuffer[0] == 0xFF) && (imagebuffer[1] == 0xD8)) 
-						{
-							//JPEG Image Data available here...
-							if(_Slideshow)
+					if (last) {
+						if (expectedImageSize == imageSize) { // Send complete image to screen
+							if (contentSubType == 0x01 && imageSize >= 2)
 							{
-								_Slideshow(imagebuffer, imageSize, DAB_JPEG);
+								// JPEG
+								if ((imagebuffer[0] == 0xFF) && (imagebuffer[1] == 0xD8) && _Slideshow)
+								{
+									_Slideshow(imagebuffer, imageSize, DAB_JPEG);
+								}
+							}
+							else if (contentSubType == 0x03 && _Slideshow)
+							{
+								// PNG
+								_Slideshow(imagebuffer, imageSize, DAB_PNG);
 							}
 						}
-					}
-					else if(contentSubType == 0x03)
-					{
-						//PNG
-						if(_Slideshow)
-						{
-							_Slideshow(imagebuffer, imageSize, DAB_PNG);
-						}
+						expectedImageSize = 0;
+						imageSize = 0;
 					}
 				}
 			}

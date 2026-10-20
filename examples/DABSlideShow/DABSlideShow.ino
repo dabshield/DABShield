@@ -316,11 +316,73 @@ void displayText(int16_t x, int16_t y, char *c, uint16_t color, uint16_t bg, uin
   tft.print(c);
 }
 
+static bool ValidateDABSettings(JsonDocument &doc) {
+  JsonVariantConst mode = doc["mode"];
+  JsonVariantConst savedVol = doc["vol"];
+  JsonObjectConst dab = doc["DAB"].as<JsonObjectConst>();
+  if (!mode.is<bool>() || !savedVol.is<uint8_t>() ||
+      savedVol.as<uint8_t>() > 63 || dab.isNull()) {
+    return false;
+  }
+
+  JsonVariantConst savedEnsemble = dab["ensemble"];
+  JsonVariantConst savedService = dab["service"];
+  JsonVariantConst savedCount = dab["NumOfEnsembles"];
+  JsonArrayConst ensembles = dab["Ensemble"].as<JsonArrayConst>();
+  if (!savedEnsemble.is<uint8_t>() || !savedService.is<uint8_t>() ||
+      !savedCount.is<uint8_t>() || ensembles.isNull() ||
+      savedCount.as<uint8_t>() > MAX_ENSEMBLES ||
+      ensembles.size() != savedCount.as<uint8_t>()) {
+    return false;
+  }
+
+  uint8_t ensembleCount = savedCount.as<uint8_t>();
+  for (JsonObjectConst saved : ensembles) {
+    JsonVariantConst savedFreq = saved["freq"];
+    JsonVariantConst savedName = saved["name"];
+    JsonVariantConst ensembleID = saved["ensembleID"];
+    JsonVariantConst ecc = saved["ECC"];
+    JsonVariantConst savedServiceCount = saved["numberofservices"];
+    JsonArrayConst services = saved["Service"].as<JsonArrayConst>();
+    const char *name = savedName.as<const char *>();
+    if (!savedFreq.is<uint8_t>() || savedFreq.as<uint8_t>() >= DAB_FREQS ||
+        !name || strlen(name) >= sizeof(Ensemble[0].Ensemble) ||
+        !ensembleID.is<uint32_t>() || !ecc.is<uint16_t>() ||
+        !savedServiceCount.is<uint8_t>() ||
+        savedServiceCount.as<uint8_t>() > MAX_SERVICES_PER_ENSEMBLE ||
+        services.isNull() ||
+        services.size() != savedServiceCount.as<uint8_t>()) {
+      return false;
+    }
+
+    for (JsonObjectConst savedStation : services) {
+      JsonVariantConst stationName = savedStation["name"];
+      JsonVariantConst serviceID = savedStation["serviceID"];
+      JsonVariantConst compID = savedStation["compID"];
+      const char *label = stationName.as<const char *>();
+      if (!label || strlen(label) >= sizeof(Ensemble[0].service[0].Label) ||
+          !serviceID.is<uint32_t>() || !compID.is<uint32_t>()) {
+        return false;
+      }
+    }
+  }
+
+  uint8_t selectedEnsemble = savedEnsemble.as<uint8_t>();
+  uint8_t selectedService = savedService.as<uint8_t>();
+  if (ensembleCount == 0) {
+    return selectedEnsemble == 0 && selectedService == 0;
+  }
+  if (selectedEnsemble >= ensembleCount) {
+    return false;
+  }
+
+  JsonObjectConst selected = ensembles[selectedEnsemble];
+  return selectedService < selected["numberofservices"].as<uint8_t>();
+}
+
 bool DABFileRead() {
-  bool rc = false;
   int e;
   int s;
-
   DynamicJsonDocument doc(32 * 1048);
 
   fs::File myfile = SPIFFS.open("/DAB.json", "r");
@@ -328,6 +390,12 @@ bool DABFileRead() {
     Serial.printf("myfile open");
     DeserializationError error = deserializeJson(doc, myfile);
     if (error == DeserializationError::Ok) {
+      if (!ValidateDABSettings(doc)) {
+        Serial.println("Invalid DAB settings; will rescan");
+        myfile.close();
+        return false;
+      }
+
       dab_mode = doc["mode"];
       vol = doc["vol"];
 
